@@ -1,5 +1,18 @@
 # SWEChainAgent [Draft] 
 
+# Usage
+
+
+```
+./agent.py alice.json alice cosmos1w4aglj3z0ls0js6l7hlk9tw0hgrtpqg7alnuyy
+```
+
+
+```
+./agent.py bob.json bob cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w
+```
+
+
 # Specification 
 
 1. Python script for autonomous interaction with Swechaind blockchain.
