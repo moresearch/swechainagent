@@ -1,0 +1,12 @@
+{
+  "auctions": [
+    {"issue_id": "BUG-101", "issue_desc": "Fix memory leak", "issue_cost": 5000},
+    {"issue_id": "FEAT-202", "issue_desc": "Implement login", "issue_cost": 7000},
+    {"issue_id": "DOC-303", "issue_desc": "Write API docs", "issue_cost": 3000}
+  ],
+  "bids": [
+    {"auction_id": "1", "amount": "4500", "message": "Experienced"},
+    {"auction_id": "2", "amount": "6000", "message": "Expert"},
+    {"auction_id": "3", "amount": "2500", "message": "Proficient"}
+  ]
+}
