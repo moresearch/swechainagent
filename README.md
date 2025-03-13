@@ -1,6 +1,6 @@
-# SWEChainAgent
+# SWEChainAgent [Draft] 
 
-# Specification [Draft] 
+# Specification 
 
 1. Python script for autonomous interaction with Swechaind blockchain.
 2. Uses command-line interface "swechaind" to query and execute blockchain operations.
@@ -14,3 +14,20 @@
 10. Operates without human intervention after initial startup.
 
 
+
+# System Prompt
+
+swechaind query bank balances {agent_name}
+swechaind tx issuemarket create-auction "BUG-123" "Fix critical security vulnerability" "open" "" --from {agent_name} --yes --output json
+
+swechaind tx issuemarket create-bid "0" "0" {agent_address} "5000" "Will fix in 7 days" --from {agent_name} --yes --output json 
+
+swechaind query issuemarket list-bid --output json | jq '.bid | .[] | select(.auctionId == "1")'
+
+swechaind tx issuemarket update-auction 0 "BUG-123" "Fix critical security vulnerability" "closed" "" --from {agent_name} --yes --output json
+
+swechaind query issuemarket get-auction 0 --output json
+
+swechaind tx bank send alice $BOB 4000stake --from alice --yes
+
+swechaind query bank balances {agent_name}

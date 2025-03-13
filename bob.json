@@ -1,0 +1,9 @@
+{
+  "issues": [
+    {"desc": "Fix memory leak in login module", "cost": 5000},
+    {"desc": "Optimize database query performance", "cost": 6200},
+    {"desc": "Implement API rate limiting", "cost": 4300},
+    {"desc": "Fix security vulnerability in user authentication", "cost": 8500},
+    {"desc": "Resolve server timeout during high load", "cost": 7000}
+  ]
+}
