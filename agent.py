@@ -1,123 +1,224 @@
 #!/usr/bin/env python3
-"""Minimal Swechaind Agent - 2025-03-13"""
-import subprocess, json, time, sys, random, os
+import subprocess, json, time, sys, random, datetime
 import dspy
 
-# Setup
-lm = dspy.LM('ollama/deepseek-r1:1.5b', api_base='http://localhost:11434')
-dspy.configure(lm=lm)
-AGENT_NAME = sys.argv[2] if len(sys.argv) > 2 else "agent"
-AGENT_ADDRESS = sys.argv[3] if len(sys.argv) > 3 else "cosmos1default"
+# Initialize LLM
+try:
+    lm = dspy.LM('ollama_chat/llama3.2:3b', api_base='http://localhost:11434', api_key='')
+    dspy.configure(lm=lm)
+except Exception as e:
+    print(f"LLM initialization error: {e}")
 
-def cmd(command):
-    """Execute shell command"""
-    print(f"$ {command}")
-    result = subprocess.run(command, shell=True, text=True, capture_output=True)
-    output = result.stdout.strip() or result.stderr.strip()
-    print(f"Output: {output[:150]}{'...' if len(output) > 150 else ''}")
-    return output
+# Constants and Globals
+AGENT_NAME = sys.argv[2] if len(sys.argv) >= 3 else "agent" 
+AGENT_ADDR = sys.argv[3] if len(sys.argv) >= 4 else "cosmos1default"
+ITERATIONS = int(sys.argv[4]) if len(sys.argv) >= 5 and sys.argv[4].isdigit() else 10
+
+def shell(cmd):
+    """Execute shell command and return output"""
+    print(f"$ {cmd}")
+    try:
+        result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+        output = result.stdout.strip() or result.stderr.strip()
+        print(f"Output: {output[:100]}..." if len(output) > 100 else f"Output: {output}")
+        return output
+    except Exception as e:
+        print(f"Error: {e}")
+        return str(e)
 
 def get_balance():
-    """Get agent balance"""
+    """Get agent's balance"""
     try:
-        output = cmd(f"swechaind query bank balances {AGENT_NAME} --output json")
+        output = shell(f"swechaind query bank balances {AGENT_NAME} --output json")
         data = json.loads(output)
         if "balances" in data and data["balances"]:
-            for coin in data["balances"]:
-                if coin.get("denom") == "stake":
-                    return int(coin.get("amount", "0"))
+            for balance in data["balances"]:
+                if balance.get("denom") == "stake":
+                    return int(balance["amount"])
         return 0
     except:
         return 0
 
-def get_data():
-    """Collect blockchain data"""
-    data = {"auctions": [], "bids": [], "my_auctions": []}
-    
-    # Get auctions
+def get_market_snapshot():
+    """Get a snapshot of the market state"""
     try:
-        output = cmd("swechaind query issuemarket list-auction --output json")
-        auctions = json.loads(output)
+        auctions_output = shell("swechaind query issuemarket list-auction --output json")
+        bids_output = shell("swechaind query issuemarket list-bid --output json")
         
-        # Handle different response formats
-        if isinstance(auctions, dict) and "auctions" in auctions:
-            data["auctions"] = auctions["auctions"]
-        elif isinstance(auctions, list):
-            data["auctions"] = auctions
+        auctions_data = json.loads(auctions_output)
+        auctions = []
+        if isinstance(auctions_data, dict) and "auctions" in auctions_data:
+            auctions = auctions_data["auctions"]
+        elif isinstance(auctions_data, list):
+            auctions = auctions_data
             
-        # Find my auctions
-        for auction in data["auctions"]:
-            if AGENT_NAME in str(auction):
-                data["my_auctions"].append(auction)
-    except:
-        pass
-    
-    return data
+        # Find auctions created by this agent
+        own_auctions = []
+        for auction in auctions:
+            if auction.get("creator") == AGENT_NAME or auction.get("creatorAddr") == AGENT_ADDR:
+                own_auctions.append(auction)
+                
+        # Find active auctions by others
+        other_auctions = []
+        for auction in auctions:
+            if (auction.get("creator") != AGENT_NAME and auction.get("creatorAddr") != AGENT_ADDR 
+                and auction.get("status", "").lower() == "open"):
+                other_auctions.append(auction)
+                
+        return {
+            "balance": get_balance(),
+            "own_auctions": own_auctions,
+            "other_auctions": other_auctions[:3],  # Limit to 3 for prompt size
+            "auctions_count": len(auctions),
+            "own_auctions_count": len(own_auctions)
+        }
+    except Exception as e:
+        print(f"Error getting market snapshot: {e}")
+        return {"balance": 0, "own_auctions": [], "other_auctions": [], "auctions_count": 0, "own_auctions_count": 0}
 
-def decide_action(agent_issues, market_data):
-    """Decide next action using LLM"""
-    balance = get_balance()
+def run_sweagent(issue_url=None):
+    """Run SWE agent on specified issue"""
+    if not issue_url:
+        issue_url = "https://github.com/SWE-agent/test-repo/issues/1"
+    
+    cmd = f"sweagent run --agent.model.name=gpt-4o --agent.model.per_instance_cost_limit=2.00 " \
+          f"--env.repo.github_url=https://github.com/SWE-agent/test-repo " \
+          f"--problem_statement.github_url={issue_url}"
+    return shell(cmd)
+
+def ask_with_dspy(prompt, query_type="market_decision"):
+    """Ask LLM using DSPy with improved error handling"""
+    class MarketReasoner(dspy.Signature):
+        situation = dspy.InputField()
+        reasoning = dspy.OutputField(desc="Step-by-step reasoning about market situation")
+        decision = dspy.OutputField(desc="Final decision as exact command")
+    
+    try:
+        if query_type == "market_decision":
+            result = dspy.Predict(MarketReasoner)(situation=prompt)
+            print("\n=== AGENT REASONING ===")
+            print(result.reasoning)
+            print("=== AGENT DECISION ===")
+            print(result.decision)
+            return result.decision
+        else:
+            return dspy.Predict(lambda x: x)(prompt=prompt).completion
+    except Exception as e:
+        print(f"DSPy error: {e}")
+        print("\n=== AGENT REASONING FAILED ===")
+        print("Agent couldn't make a decision due to reasoning error")
+        return "DECISION_FAILED"
+
+def decide_action(agent_data):
+    """Decide what action to take based on market data and agent's issues"""
+    # Get market snapshot
+    market = get_market_snapshot()
+    
+    # Format agent data
+    issues = agent_data.get("issues", [])
+    if not issues:
+        issues = [{"desc": "Generic issue", "cost": 5000}]
+    
+    # Current date and time for context
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     prompt = f"""
-You are a blockchain agent making decisions. Current state:
-- My balance: {balance} stake
-- My issues: {agent_issues[:2] if agent_issues else []}
-- Active auctions: {len(market_data['auctions'])}
-- My auctions: {len(market_data['my_auctions'])}
+Date: {now}
+You are {AGENT_NAME}, a profit-maximizing blockchain agent with address {AGENT_ADDR}.
 
-Choose ONE action:
-1. CREATE: Make an auction from my issues
-   swechaind tx issuemarket create-auction ISSUE-ID "DESCRIPTION" open "" --from {AGENT_NAME} --yes
-   
-2. BID: Bid on an auction (only if I have enough balance)
-   swechaind tx issuemarket create-bid AUCTION-ID 0 {AGENT_ADDRESS} AMOUNT "MESSAGE" --from {AGENT_NAME} --yes
-   
-3. CLOSE: Close my auction if I created one
-   swechaind tx issuemarket update-auction AUCTION-ID ISSUE-ID "DESCRIPTION" closed "" --from {AGENT_NAME} --yes
-   
-4. CHECK: View auctions or balances
-   swechaind query issuemarket list-auction --output json
+YOUR MARKET STATUS:
+- Current balance: {market['balance']} tokens
+- You have {market['own_auctions_count']} active auctions
+- There are {market['auctions_count']} total auctions in the market
+- Your issues to work on: {json.dumps(issues[:2])}
 
-Return only the complete command to execute.
+MARKET OPPORTUNITIES:
+- Open auctions to bid on: {json.dumps(market['other_auctions'])}
+- Your own auctions: {json.dumps(market['own_auctions'])}
+
+ECONOMIC INCENTIVES:
+1. CREATE AUCTIONS to outsource your issues and save development costs
+   - You pay winning bidders but save your time for more valuable work
+   - Command: swechaind tx issuemarket create-auction "BUG-123" "Fix memory leak" "open" "" --from {AGENT_NAME} --yes
+
+2. PLACE BIDS to earn tokens by completing others' issues
+   - Lower bids increase chances of winning but reduce profit
+   - Higher bids increase profit but reduce chances of winning
+   - Command: swechaind tx issuemarket create-bid "0" "0" {AGENT_ADDR} "500" "Will fix fast" --from {AGENT_NAME} --yes
+
+3. CLOSE YOUR AUCTIONS when ready to award to lowest bidder
+   - Command: swechaind tx issuemarket update-auction 0 "BUG-123" "Fix memory leak" "closed" "" --from {AGENT_NAME} --yes
+
+4. MARKET RESEARCH actions:
+   - Check market: swechaind query issuemarket list-auction --output json
+   - Check balance: swechaind query bank balances {AGENT_NAME} --output json
+
+Think economically! Balance creating auctions and bidding to maximize profit.
+Return ONLY the exact command to execute.
 """
-    try:
-        prediction = dspy.Predict(lambda x: x)(prompt)
-        return prediction.strip()
-    except:
-        # Fallback commands
-        if balance < 500:
-            return f"swechaind query bank balances {AGENT_NAME}"
-        elif market_data["my_auctions"]:
-            auction = market_data["my_auctions"][0]
-            auction_id = auction.get("id", "0")
-            desc = auction.get("description", "Issue").replace('"', '\\"')
-            issue_id = auction.get("issueId", "ISSUE-1") 
-            return f'swechaind tx issuemarket update-auction {auction_id} {issue_id} "{desc}" closed "" --from {AGENT_NAME} --yes'
-        elif agent_issues and random.random() > 0.5:
-            issue = random.choice(agent_issues)
-            issue_id = f"ISSUE-{random.randint(100, 999)}"
-            desc = issue["desc"].replace('"', '\\"')
-            return f'swechaind tx issuemarket create-auction {issue_id} "{desc}" open "" --from {AGENT_NAME} --yes'
-        else:
-            return "swechaind query issuemarket list-auction --output json"
+    response = ask_with_dspy(prompt)
+    
+    # Check if decision failed
+    if response == "DECISION_FAILED":
+        print("Using fallback command due to reasoning failure")
+        return f"swechaind query issuemarket list-auction --output json"
+    
+    # Extract command if present
+    if "swechaind" in response:
+        for line in response.split("\n"):
+            if "swechaind" in line:
+                return line.strip()
+    
+    print("Agent returned response without valid command: fallback to market research")
+    return f"swechaind query issuemarket list-auction --output json"
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: ./agent.py <data_file.json> [agent_name] [agent_address] [iterations]")
         sys.exit(1)
-    
+        
     # Load agent data
-    agent_data = json.load(open(sys.argv[1]))
-    issues = agent_data.get("issues", [])
-    iterations = int(sys.argv[4]) if len(sys.argv) > 4 else 10
+    try:
+        agent_data = json.load(open(sys.argv[1]))
+    except Exception as e:
+        print(f"Error loading data file: {e}")
+        agent_data = {"issues": []}
+        
+    print(f"Agent {AGENT_NAME} started with {len(agent_data.get('issues', []))} issues")
     
-    print(f"Agent {AGENT_NAME} started with {len(issues)} issues")
-    
-    for i in range(iterations):
-        print(f"\n=== ITERATION {i+1}/{iterations} ===")
-        market_data = get_data()
-        command = decide_action(issues, market_data)
-        cmd(command)
+    for i in range(ITERATIONS):
+        print(f"\n=== ITERATION {i+1}/{ITERATIONS} ===")
+        
+        # Get action from LLM
+        action = decide_action(agent_data)
+        
+        # If bidding, check balance first
+        if "create-bid" in action:
+            bid_amount = 500  # Default
+            try:
+                # Extract bid amount from command
+                parts = action.split('"')
+                for j, part in enumerate(parts):
+                    if part.isdigit() and j > 3:  # Should be after auction id and bidder address
+                        bid_amount = int(part)
+                        break
+            except:
+                pass
+                
+            if get_balance() < bid_amount:
+                print(f"⚠️ Insufficient balance ({get_balance()}) for bidding {bid_amount}! Checking market instead.")
+                action = f"swechaind query issuemarket list-auction --output json"
+            else:
+                print(f"✓ Balance sufficient for bid: {get_balance()} >= {bid_amount}")
+        
+        # Execute action
+        if action.startswith("swechaind"):
+            shell(action)
+        else:
+            print(f"Invalid action: {action}")
+            print("Agent couldn't make a valid decision. Doing market research instead.")
+            shell(f"swechaind query issuemarket list-auction --output json")
+            
         time.sleep(0.5)
 
 if __name__ == "__main__":

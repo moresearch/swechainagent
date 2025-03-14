@@ -1,5 +1,9 @@
 # SWEChainAgent [Draft] 
 
+# About
+
+A wrapper for SWE-Agent that augments it to operate in chain environments.
+
 # Usage
 
 
