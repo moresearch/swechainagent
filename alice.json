@@ -1,9 +1,0 @@
-{
-  "issues": [
-    {"desc": "Implement responsive design for mobile", "cost": 6800},
-    {"desc": "Create comprehensive API documentation", "cost": 4200},
-    {"desc": "Fix CSS layout issues in dashboard", "cost": 3500},
-    {"desc": "Add accessibility features to user interface", "cost": 5500},
-    {"desc": "Design and implement new user onboarding flow", "cost": 7800}
-  ]
-}

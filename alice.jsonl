@@ -1,0 +1,5 @@
+{"desc": "Optimize algorithm for search functionality", "cost": 6000, "priority": "medium"}
+{"desc": "Add export to PDF feature", "cost": 4500, "priority": "low"}
+{"desc": "Fix cross-site scripting vulnerability", "cost": 7800, "priority": "critical"}
+{"desc": "Implement notification system", "cost": 5200, "priority": "high"}
+{"desc": "Fix UI rendering on mobile devices", "cost": 3800, "priority": "medium"}

@@ -1,0 +1,5 @@
+{"desc": "Fix memory leak in login module", "cost": 5000, "priority": "high"}
+{"desc": "Implement user authentication", "cost": 7500, "priority": "medium"}
+{"desc": "Fix security vulnerability in payment processing", "cost": 8000, "priority": "critical"}
+{"desc": "Add dark mode support", "cost": 3500, "priority": "low"}
+{"desc": "Fix database connection timeout", "cost": 4200, "priority": "medium"}
