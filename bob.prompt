@@ -1,4 +1,0 @@
-1. check the balance of both alice and bob.
-2. send 100 tokens from alice to bob's address: cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w
-3. check the balances again to verify the transaction was successful.
-4. display information about bob's account history.

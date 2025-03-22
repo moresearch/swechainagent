@@ -18,7 +18,7 @@ type Config struct {
 func NewConfig() *Config {
 	config := &Config{
 		OllamaHost:    "http://127.0.0.1:11434",
-		MCPServerPath: "./swechain-mcp-server",
+		MCPServerPath: "./bin/swechain-mcp-server",
 		ChatModel:     "llama3.2:3b",
 		ToolsModel:    "llama3.2:3b-instruct-fp16",
 		AgentName:     "agent",
