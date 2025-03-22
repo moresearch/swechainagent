@@ -1,0 +1,6 @@
+TODO generate report from trajs
+TODO analyze generated image report using multimodal model.
+TODO get address tool e.g. swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
+TODO add memory as a tool in the mcp server, and prompt the react agent to use memory if they want to remmber previous interactions
+
+memory RAG will be implemented as a standalone binary (tool) 
