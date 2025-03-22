@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import pickle
+import argparse
+import dspy
+from dspy.predict import Predict
+from dspy.teleprompt import BootstrapFewShot
+from sentence_transformers import SentenceTransformer
+import faiss
+
+# Base directories
+BASE_DIR = os.path.expanduser("~/.hackspree")
+SYS_DIR = os.path.join(BASE_DIR, "sys")
+TRAINSETS_DIR = os.path.join(SYS_DIR, "trainsets")
+MODELS_DIR = os.path.join(SYS_DIR, "models")
+
+# Ensure system directories exist
+os.makedirs(TRAINSETS_DIR, exist_ok=True)
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+# Custom FAISS-based semantic retriever
+class FAISSRetriever:
+    def __init__(self, documents, k=3):
+        self.documents = documents
+        self.k = k
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')  # Embedding model
+        self.index = self._build_index()
+
+    def _build_index(self):
+        embeddings = self.model.encode(self.documents)
+        dimension = embeddings.shape[1]
+        index = faiss.IndexFlatL2(dimension)  # FAISS index
+        index.add(embeddings)
+        return index
+
+    def update_index(self, new_documents):
+        """Update the FAISS index with new documents."""
+        new_embeddings = self.model.encode(new_documents)
+        self.index.add(new_embeddings)
+        self.documents.extend(new_documents)
+
+    def __call__(self, query, k=3):
+        query_embedding = self.model.encode([query])
+        distances, indices = self.index.search(query_embedding, k)
+        # Return retrieved documents as strings
+        return [self.documents[i] for i in indices[0]]
+
+# Define a RAG module in DSPy
+class RAG(dspy.Module):
+    def __init__(self, num_passages=3):
+        super().__init__()
+        self.retriever = None  # Will be set during training
+        #self.generate_answer = Predict("context, question -> answer")
+        # https://github.com/lakshmanok/lakblogs/tree/main/bridge_bidding_advisor
+        self.generate_answer = dspy.ChainOfThought("context, question -> answer")
+
+    def forward(self, question):
+        # Retrieve relevant passages
+        passages = self.retriever(question)
+        context = "\n\n".join(passages)  # Join passages into a single context string
+
+        # Generate answer using the retrieved context
+        prediction = self.generate_answer(context=context, question=question)
+        return prediction
+
+# Custom metric for evaluating JSON-structured responses
+def json_metric(example, prediction, trace=None):
+    """Evaluate if the prediction is a valid JSON and contains required fields."""
+    try:
+        # Handle case where prediction is a string
+        if isinstance(prediction, str):
+            prediction_json = json.loads(prediction)
+        else:
+            # Handle case where prediction is a Prediction object
+            prediction_json = json.loads(prediction.answer)
+
+        # Check if all required fields are present
+        required_fields = ["auctionID", "auctioneerID", "bidders", "bidAmount"]
+        if all(field in prediction_json for field in required_fields):
+            return True
+        else:
+            return False
+    except json.JSONDecodeError:
+        return False
+
+def load_documents(env_dir):
+    """Load documents recursively from the environment directory."""
+    documents = []
+    for root, _, files in os.walk(env_dir):
+        for filename in files:
+            with open(os.path.join(root, filename), "r") as file:
+                documents.append(file.read())
+    return documents
+
+def save_model(model, path):
+    """Save the model to a .pkl file."""
+    with open(path, "wb") as f:
+        pickle.dump({
+            "documents": model.documents,
+            "index": model.index,
+            "model": model.model
+        }, f)
+
+def load_model(path):
+    """Load the model from a .pkl file."""
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+        retriever = FAISSRetriever(data["documents"])
+        retriever.index = data["index"]
+        retriever.model = data["model"]
+        return retriever
+
+def train(env, llm_model, trainset_path):
+    """Train the RAG pipeline for a specific environment."""
+    env_dir = os.path.join(BASE_DIR, env)
+    model_save_path = os.path.join(MODELS_DIR, f"{env}.pkl")
+
+    # Ensure the environment directory exists
+    os.makedirs(env_dir, exist_ok=True)
+
+    # Load documents recursively
+    documents = load_documents(env_dir)
+    if not documents:
+        print(f"No documents found in {env_dir}.")
+        return
+
+    # Configure DSPy with the specified LLM
+    lm = dspy.LM(model=f"ollama/{llm_model}")
+    dspy.configure(lm=lm)
+
+    # Initialize FAISS retriever
+    faiss_retriever = FAISSRetriever(documents)
+
+    # Initialize RAG
+    rag = RAG(num_passages=3)
+    rag.retriever = faiss_retriever
+
+    # Load training data
+    with open(trainset_path, "r") as f:
+        trainset_data = json.load(f)
+
+    # Prepare training examples with input keys
+    trainset = [
+        dspy.Example(question=example["question"], answer=example["answer"]).with_inputs("question")
+        for example in trainset_data
+    ]
+
+    # Optimize the RAG pipeline using BootstrapFewShot
+    print("Optimizing RAG pipeline...")
+    teleprompter = BootstrapFewShot(metric=json_metric)
+    optimized_rag = teleprompter.compile(rag, trainset=trainset)
+
+    # Save the optimized model to disk
+    print(f"Saving optimized model to {model_save_path}...")
+    save_model(faiss_retriever, model_save_path)
+
+    print("Training complete. Exiting...")
+
+def infer(env, query):
+    """Infer using a trained model for a specific environment."""
+    env_dir = os.path.join(BASE_DIR, env)
+    model_save_path = os.path.join(MODELS_DIR, f"{env}.pkl")
+
+    if not os.path.exists(model_save_path):
+        print(f"Model file {model_save_path} not found. Please train the model first.")
+        return
+
+    # Load the optimized model
+    print(f"Loading optimized model from {model_save_path}...")
+    faiss_retriever = load_model(model_save_path)
+
+    # Initialize RAG
+    rag = RAG(num_passages=3)
+    rag.retriever = faiss_retriever
+
+    # Configure DSPy with the specified LLM
+    lm = dspy.LM(model=f"ollama/deepseek-r1:1.5b")  # LLM server is called here
+    dspy.configure(lm=lm)
+
+    # Perform query
+    response = rag(query)
+    print(f"Query: {query}")
+    print(f"Response: {response}")
+
+    # Exit after inference
+    print("Inference complete. Exiting...")
+
+def rebuild_index(env):
+    """Rebuild the FAISS index for a specific environment."""
+    env_dir = os.path.join(BASE_DIR, env)
+    model_save_path = os.path.join(MODELS_DIR, f"{env}.pkl")
+
+    if not os.path.exists(env_dir):
+        print(f"Environment directory {env_dir} not found.")
+        return
+
+    # Load documents recursively
+    documents = load_documents(env_dir)
+    if not documents:
+        print(f"No documents found in {env_dir}.")
+        return
+
+    # Initialize FAISS retriever
+    faiss_retriever = FAISSRetriever(documents)
+
+    # Save the updated model to disk
+    print(f"Rebuilding FAISS index and saving to {model_save_path}...")
+    save_model(faiss_retriever, model_save_path)
+    print("Rebuild complete.")
+
+if __name__ == "__main__":
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Feedback Engine for RAG pipelines.")
+    parser.add_argument("--env", type=str, required=True, help="The environment to use (e.g., ghissuemarket).")
+    parser.add_argument("--mode", type=str, required=True, choices=["train", "infer", "rebuild"], help="Mode: train, infer, or rebuild.")
+    parser.add_argument("--llm", type=str, help="The LLM model to use (e.g., deepseek-r1:1.5b). Required for train mode.")
+    parser.add_argument("--trainset", type=str, help="Path to the training dataset (JSON file). Required for train mode.")
+    parser.add_argument("--query", type=str, help="The query to execute. Required for infer mode.")
+    args = parser.parse_args()
+
+    if args.mode == "train":
+        if not args.llm or not args.trainset:
+            parser.error("--llm and --trainset are required for train mode.")
+        train(args.env, args.llm, args.trainset)
+    elif args.mode == "infer":
+        if not args.query:
+            parser.error("--query is required for infer mode.")
+        infer(args.env, args.query)
+    elif args.mode == "rebuild":
+        rebuild_index(args.env)
