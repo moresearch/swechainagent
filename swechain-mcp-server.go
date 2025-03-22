@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 
@@ -55,19 +56,36 @@ func main() {
 	fmt.Println("👋 Server stopped")
 }
 
+//func helloHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+
 func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 	account, ok := request.Params.Arguments["account"].(string)
-	//fmt.Println(account)
 	if !ok {
-		return mcp.NewToolResultError("account must be a string"), nil
+		return nil, errors.New("name must be a string")
 	}
+
+	//account := request.Params.Arguments["account"].(string)
+	//fmt.Println(account)
+	//if !ok {
+	//return mcp.NewToolResultError("account must be a string"), nil
+	// i think this became
+	// return nil, errors.New("name must be a string")
+	//	return errors.New("account must be a string"), nil
+	//}
 	//cmd := exec.Command("/home/maf/go/bin/swechaind query bank balances", "-s", account, "--output json")
 	cmd := exec.Command("swechaind", "query", "bank", "balances", account, "--output", "json")
 	output, err := cmd.Output()
+
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return nil, errors.New("name must be a string")
 	}
+
+	//if err != nil {
+	//	//return mcp.NewToolResultError(err.Error()), nil
+	//	//return errors.New(err.Error()), nil
+	//	return errors.New(err.Error())
+	//}
 	//content := string(output)
 	content := string(output)
 
@@ -77,20 +95,32 @@ func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 	to, ok := request.Params.Arguments["to"].(string)
+
 	if !ok {
-		return mcp.NewToolResultError("to and form must be strings"), nil
+		return nil, errors.New("name must be a string")
 	}
+
+	//if !ok {
+	//	return mcp.NewToolResultError("to and form must be strings"), nil
+	//}
+
 	from, ok := request.Params.Arguments["from"].(string)
+
 	if !ok {
-		return mcp.NewToolResultError("to and form must be strings"), nil
+		return nil, errors.New("name must be a string")
 	}
+
+	//if !ok {
+	//	return mcp.NewToolResultError("to and form must be strings"), nil
+	//}
 
 	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
 	cmd := exec.Command("swechaind", "tx", "bank", "send", from, to, "111token", "--from", from, "--output", "json", "--yes")
 
 	output, err := cmd.Output()
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		//return mcp.NewToolResultError(err.Error()), nil
+		return nil, errors.New("name must be a string")
 	}
 	//content := string(output)
 	content := string(output)
