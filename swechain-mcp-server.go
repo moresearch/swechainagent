@@ -58,6 +58,7 @@ func main() {
 func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 	account, ok := request.Params.Arguments["account"].(string)
+	//fmt.Println(account)
 	if !ok {
 		return mcp.NewToolResultError("account must be a string"), nil
 	}
