@@ -185,7 +185,7 @@ def infer(env, query):
     print(f"Response: {response}")
 
     # Exit after inference
-    print("Inference complete. Exiting...")
+    print("Knowledge query done.") 
 
 def rebuild_index(env):
     """Rebuild the FAISS index for a specific environment."""
