@@ -1,0 +1,10 @@
+[
+  {
+    "question": "What is the status of auction #1234?",
+    "answer": "{\"auctionID\": \"1234\", \"auctioneerID\": \"user123\", \"bidders\": [\"user456\", \"user789\"], \"bidAmount\": 500}"
+  },
+  {
+    "question": "Who won the bidding for item #5678?",
+    "answer": "{\"auctionID\": \"5678\", \"auctioneerID\": \"user234\", \"bidders\": [\"user567\"], \"bidAmount\": 1200}"
+  }
+]

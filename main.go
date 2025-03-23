@@ -20,7 +20,7 @@ func main() {
 	}
 
 	// Create context with timeout (2 minutes)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	// Get configuration
