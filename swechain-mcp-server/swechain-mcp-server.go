@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,6 +43,10 @@ func main() {
 			mcp.Required(),
 			mcp.Description("query the memory for real-time information"),
 		),
+		mcp.WithString("agent_name",
+			mcp.Required(),
+			mcp.Description("agent_name is your given name, and it is used to RAG over your memories"),
+		),
 	)
 
 	s.AddTool(mem_tool, memHandler)
@@ -63,14 +68,18 @@ func main() {
 	// send tool
 	//
 	send_tool := mcp.NewTool("send",
-		mcp.WithDescription("sends tokens from one account's address to another"),
+		mcp.WithDescription("sends an amount from one account's address to another, use this tool when trying to send tokens to another address from your address"),
 		mcp.WithString("from",
 			mcp.Required(),
-			mcp.Description("sender account address"),
+			mcp.Description("your account address"),
 		),
 		mcp.WithString("to",
 			mcp.Required(),
-			mcp.Description("receiver account address"),
+			mcp.Description("account address you want to send to"),
+		),
+		mcp.WithString("amount",
+			mcp.Required(),
+			mcp.Description("amount to send, example: it just numbers like 100 or 200 or 300, etc."),
 		),
 	)
 	s.AddTool(send_tool, sendHandler)
@@ -78,10 +87,15 @@ func main() {
 	//
 	// keys tool
 	//
-	keys_tool := mcp.NewTool("keys",
-		mcp.WithDescription("get account information such as account address, account name, account public key"),
+	addr_tool := mcp.NewTool("addr",
+		mcp.WithDescription("give an account name to get the account address"),
+
+		mcp.WithString("account_name",
+			mcp.Required(),
+			mcp.Description("the name of the person you want to get its address"),
+		),
 	)
-	s.AddTool(keys_tool, keysHandler)
+	s.AddTool(addr_tool, addrHandler)
 
 	fmt.Println("🚀 Server started")
 	// Start the stdio server
@@ -99,10 +113,19 @@ func memHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		return nil, errors.New("Error: mem query parameter")
 	}
 
-	cmd := exec.Command("./bin/feedback", "--env", "ghissuemarket", "--mode", "infer", "--query", query)
+	agent_name, ok := request.Params.Arguments["agent_name"].(string)
+	if !ok {
+		return nil, errors.New("Error: mem agent_name parameter")
+	}
+
+	//cmd := exec.Command("./bin/feedback", "--env", "ghissuemarket", "--mode", "infer", "--query", query)
+	cmd := exec.Command("./bin/feedback", "--env", strings.ToLower(agent_name), "--mode", "infer", "--query", query)
+	//cmd := exec.Command("./bin/feedback", "--env", "bob", "--mode", "infer", "--query", query)
 
 	output, err := cmd.Output()
+	fmt.Println(output)
 	if err != nil {
+		fmt.Println(err)
 		return nil, errors.New("Error: rag/memory")
 	}
 	content := string(output)
@@ -113,14 +136,13 @@ func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 
 	account, ok := request.Params.Arguments["account"].(string)
 	if !ok {
-		return nil, errors.New("name must be a string")
+		return nil, errors.New("account must be a string")
 	}
 	//cmd := exec.Command("/home/maf/go/bin/swechaind query bank balances", "-s", account, "--output json")
 	cmd := exec.Command("swechaind", "query", "bank", "balances", account, "--output", "json")
 	output, err := cmd.Output()
-
 	if err != nil {
-		return nil, errors.New("name must be a string")
+		return nil, errors.New("Error: swechaind query bank balances")
 	}
 	content := string(output)
 	return mcp.NewToolResultText(content), nil
@@ -129,37 +151,56 @@ func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 	to, ok := request.Params.Arguments["to"].(string)
-
 	if !ok {
-		return nil, errors.New("the to parameter is bad!")
+		return nil, errors.New("the 'to' parameter is bad!")
 	}
 
 	from, ok := request.Params.Arguments["from"].(string)
-
 	if !ok {
-		return nil, errors.New("name must be a string")
+		return nil, errors.New("the 'from' parameter is bad")
+	}
+
+	amount, ok := request.Params.Arguments["amount"].(string)
+	if !ok {
+		return nil, errors.New("the 'amount' parameter is bad")
 	}
 
 	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
-	cmd := exec.Command("swechaind", "tx", "bank", "send", from, to, "111token", "--from", from, "--output", "json", "--yes")
+	// swechaind tx bank send <from_address> <to_address> <amount> --chain-id=<chain_id> --fees=<fee_amount> --gas=<gas_limit> --yes
+	//cmd := exec.Command("swechaind", "tx", "bank", "send", from, to, "111token", "--from", from, "--output", "json", "--yes")
+	cmd := exec.Command("swechaind", "tx", "bank", "send", strings.ToLower(from), strings.ToLower(to), amount, "--from", strings.ToLower(from), "--output", "json", "--yes")
 
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, errors.New("name must be a string")
+		return nil, errors.New("Error: all addresses are Cosmos sdk addresses like cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w which is a Bech32-encoded, alphanumeric string with a prefix, uniquely identifying an account on a Cosmos-based blockchain.")
 	}
 	content := string(output)
 	return mcp.NewToolResultText(content), nil
 }
 
-func keysHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func addrHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	account_name, ok := request.Params.Arguments["account_name"].(string)
+	if !ok {
+		return nil, errors.New("use your intended 'account_name' to get its valid address!")
+	}
+
 	//  swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
 	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
 	// swechaind keys list
-	cmd := exec.Command("swechaind", "keys", "list")
+	//  swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
+
+	//cmd := exec.Command("swechaind keys list --output json | jq '.[] | select(.name == ", account_name, ") | .address'")
+
+	//cmdString := fmt.Sprintf("/home/maf/go/bin/swechaind keys list --output json | jq '.[] | select(.name == \"%s\") | .address'", accountName)
+	// Execute the command using a shell
+	//cmd := exec.Command("bash", "-c", cmdString)
+
+	//cmd := exec.Command("swechaind", "keys", "list")
+	cmd := exec.Command("swechaind", "keys", "show", strings.ToLower(account_name), "-a")
 
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, errors.New("Error: `swechain keys list`")
+		return nil, errors.New("Error: if you use a valid account_name, you will get a valid address to be able to send to")
 	}
 	content := string(output)
 	return mcp.NewToolResultText(content), nil

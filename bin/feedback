@@ -4,6 +4,7 @@ import os
 import json
 import pickle
 import argparse
+import sys
 import dspy
 from dspy.predict import Predict
 from dspy.teleprompt import BootstrapFewShot
@@ -11,6 +12,7 @@ from sentence_transformers import SentenceTransformer
 import faiss
 
 # Base directories
+#TODO ~/.swechainagent dir for trajs
 BASE_DIR = os.path.expanduser("~/.hackspree")
 SYS_DIR = os.path.join(BASE_DIR, "sys")
 TRAINSETS_DIR = os.path.join(SYS_DIR, "trainsets")
@@ -90,27 +92,45 @@ def load_documents(env_dir):
     documents = []
     for root, _, files in os.walk(env_dir):
         for filename in files:
-            with open(os.path.join(root, filename), "r") as file:
-                documents.append(file.read())
+            try:
+                with open(os.path.join(root, filename), "r") as file:
+                    documents.append(file.read())
+            except Exception as e:
+                print(f"Warning: Could not read file {os.path.join(root, filename)}: {e}")
     return documents
 
 def save_model(model, path):
     """Save the model to a .pkl file."""
-    with open(path, "wb") as f:
-        pickle.dump({
-            "documents": model.documents,
-            "index": model.index,
-            "model": model.model
-        }, f)
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        with open(path, "wb") as f:
+            pickle.dump({
+                "documents": model.documents,
+                "index": model.index,
+                "model": model.model
+            }, f)
+        print(f"Model successfully saved to {path}")
+    except Exception as e:
+        print(f"Error saving model to {path}: {e}")
+        raise
 
 def load_model(path):
     """Load the model from a .pkl file."""
-    with open(path, "rb") as f:
-        data = pickle.load(f)
-        retriever = FAISSRetriever(data["documents"])
-        retriever.index = data["index"]
-        retriever.model = data["model"]
-        return retriever
+    try:
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+            retriever = FAISSRetriever(data["documents"])
+            retriever.index = data["index"]
+            retriever.model = data["model"]
+            return retriever
+    except FileNotFoundError:
+        print(f"ERROR: Model file {path} not found.")
+        print(f"Please train the model first using: {sys.argv[0]} --env {os.path.basename(path).split('.')[0]} --mode train --llm <model_name> --trainset <trainset_path>")
+        sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: Failed to load model from {path}: {e}")
+        sys.exit(1)
 
 def train(env, llm_model, trainset_path):
     """Train the RAG pipeline for a specific environment."""
@@ -138,8 +158,15 @@ def train(env, llm_model, trainset_path):
     rag.retriever = faiss_retriever
 
     # Load training data
-    with open(trainset_path, "r") as f:
-        trainset_data = json.load(f)
+    try:
+        with open(trainset_path, "r") as f:
+            trainset_data = json.load(f)
+    except FileNotFoundError:
+        print(f"ERROR: Training dataset not found at {trainset_path}")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        print(f"ERROR: Training dataset at {trainset_path} is not valid JSON")
+        sys.exit(1)
 
     # Prepare training examples with input keys
     trainset = [
@@ -163,11 +190,12 @@ def infer(env, query):
     env_dir = os.path.join(BASE_DIR, env)
     model_save_path = os.path.join(MODELS_DIR, f"{env}.pkl")
 
-    if not os.path.exists(model_save_path):
-        print(f"Model file {model_save_path} not found. Please train the model first.")
-        return
+    # Check if environment directory exists
+    if not os.path.exists(env_dir):
+        print(f"WARNING: Environment directory {env_dir} not found. Creating it now...")
+        os.makedirs(env_dir, exist_ok=True)
 
-    # Load the optimized model
+    # Load the optimized model - this will exit with an error message if the model doesn't exist
     print(f"Loading optimized model from {model_save_path}...")
     faiss_retriever = load_model(model_save_path)
 
@@ -176,13 +204,22 @@ def infer(env, query):
     rag.retriever = faiss_retriever
 
     # Configure DSPy with the specified LLM
-    lm = dspy.LM(model=f"ollama/deepseek-r1:1.5b")  # LLM server is called here
-    dspy.configure(lm=lm)
+    try:
+        lm = dspy.LM(model=f"ollama/deepseek-r1:1.5b")  # LLM server is called here
+        dspy.configure(lm=lm)
+    except Exception as e:
+        print(f"ERROR: Failed to connect to LLM server: {e}")
+        print("Make sure the Ollama service is running and deepseek-r1:1.5b model is available")
+        sys.exit(1)
 
     # Perform query
-    response = rag(query)
-    print(f"Query: {query}")
-    print(f"Response: {response}")
+    try:
+        response = rag(query)
+        print(f"Query: {query}")
+        print(f"Response: {response}")
+    except Exception as e:
+        print(f"ERROR: Failed to process query: {e}")
+        sys.exit(1)
 
     # Exit after inference
     print("Knowledge query done.") 
@@ -194,6 +231,9 @@ def rebuild_index(env):
 
     if not os.path.exists(env_dir):
         print(f"Environment directory {env_dir} not found.")
+        print(f"Creating directory {env_dir}...")
+        os.makedirs(env_dir, exist_ok=True)
+        print(f"Please add documents to {env_dir} before rebuilding the index.")
         return
 
     # Load documents recursively

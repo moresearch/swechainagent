@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,12 +19,22 @@ func main() {
 		log.Fatalf("Usage: %s <prompt_file>", os.Args[0])
 	}
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	// Create context with timeout (2 minutes)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	// Get configuration
 	config := core.NewConfig()
+
+	// Add prompt file to config
+	promptFile := os.Args[1]
+	config.PromptFile = promptFile
+
+	// Extract agent name from prompt file (remove .prompt extension)
+	agentName := strings.TrimSuffix(filepath.Base(promptFile), ".prompt")
+	config.AgentName = agentName
+
+	fmt.Printf("Running as agent: %s\n", agentName)
 
 	// Create agent
 	agent, err := core.NewAgent(config)
@@ -33,15 +44,10 @@ func main() {
 	defer agent.Close()
 
 	// Load user prompt from file
-	promptFile := os.Args[1]
 	userPrompt, err := loadPromptFile(promptFile)
 	if err != nil {
 		log.Fatalf("Failed to load prompt file: %v", err)
 	}
-
-	// Extract agent name from prompt filename (remove .prompt extension)
-	agentName := strings.TrimSuffix(promptFile, ".prompt")
-	fmt.Printf("Running as agent: %s\n", agentName)
 
 	// Execute the workflow
 	if err := agent.Run(ctx, userPrompt); err != nil {

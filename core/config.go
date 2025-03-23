@@ -12,6 +12,7 @@ type Config struct {
 	ToolsModel    string
 	AgentName     string
 	AgentVersion  string
+	PromptFile    string // Added to track the prompt file used
 }
 
 // NewConfig creates a new configuration with default values
@@ -19,9 +20,14 @@ func NewConfig() *Config {
 	config := &Config{
 		OllamaHost:    "http://127.0.0.1:11434",
 		MCPServerPath: "./bin/swechain-mcp-server",
-		ChatModel:     "llama3.2:3b",
-		//ToolsModel:    "llama3.2:3b-instruct-fp16",
-		ToolsModel:   "qwen2.5-coder:14b",
+		//ChatModel:     "llama3.2:3b-instruct-fp16",
+		ToolsModel: "llama3.2:3b-instruct-fp16",
+		//ChatModel: "qwq:32b",
+		//ToolsModel: "qwq:32b",
+		//ChatModel: "granite3.2:8b-instruct-fp16",
+		//ToolsModel:   "granite3.2:8b-instruct-fp16",
+		ChatModel: "deepseek-r1:1.5b",
+		//ToolsModel: "qwen2.5-coder:7b-instruct-fp16",
 		AgentName:    "agent",
 		AgentVersion: "1.0.0",
 	}

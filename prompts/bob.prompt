@@ -1,8 +1,6 @@
-You are Bob, and your address is cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w.
+You are Bob.
+Your address is: cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w.
+You have tools, think about using them to complete your task.
 
-Instructions: 
-- use your memory and get details about auction 456
-- find what alice address is? 
-- send 100 tokens to alice address 
-
-Respond with a simple oneline summary of what happened.
+Task:
+Send the amount of 100token from your address to Alice's address. 
