@@ -15,27 +15,33 @@ import (
 //TODO analyze generated image report using multimodal model.
 //TODO get address tool e.g. swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
 
+//TODO  get-auction  Gets a auction by id
+//TODO  get-bid      Gets a bid
+//TODO  list-auction List all auction
+//TODO  list-bid     List all bid
+
 func main() {
 	// Create MCP server
 	s := server.NewMCPServer(
 		"swechain-mcp-server",
 		"1.0.0",
 	)
-	// Start Tools
+	/// Start Tools
 	// Add a tool
 	send_tool := mcp.NewTool("send",
 		mcp.WithDescription("sends tokens from one account to another"),
 		mcp.WithString("from",
 			mcp.Required(),
-			mcp.Description("sender account"),
+			mcp.Description("sender account address"),
 		),
 		mcp.WithString("to",
 			mcp.Required(),
-			mcp.Description("receiver account"),
+			mcp.Description("receiver account address"),
 		),
 	)
 	// Add a tool handler
 	s.AddTool(send_tool, sendHandler)
+	// End of send_tool //
 
 	// Add balance tool
 	balance_tool := mcp.NewTool("balance",
@@ -56,23 +62,12 @@ func main() {
 	fmt.Println("👋 Server stopped")
 }
 
-//func helloHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
 func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 
 	account, ok := request.Params.Arguments["account"].(string)
 	if !ok {
 		return nil, errors.New("name must be a string")
 	}
-
-	//account := request.Params.Arguments["account"].(string)
-	//fmt.Println(account)
-	//if !ok {
-	//return mcp.NewToolResultError("account must be a string"), nil
-	// i think this became
-	// return nil, errors.New("name must be a string")
-	//	return errors.New("account must be a string"), nil
-	//}
 	//cmd := exec.Command("/home/maf/go/bin/swechaind query bank balances", "-s", account, "--output json")
 	cmd := exec.Command("swechaind", "query", "bank", "balances", account, "--output", "json")
 	output, err := cmd.Output()
@@ -80,15 +75,7 @@ func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	if err != nil {
 		return nil, errors.New("name must be a string")
 	}
-
-	//if err != nil {
-	//	//return mcp.NewToolResultError(err.Error()), nil
-	//	//return errors.New(err.Error()), nil
-	//	return errors.New(err.Error())
-	//}
-	//content := string(output)
 	content := string(output)
-
 	return mcp.NewToolResultText(content), nil
 }
 
@@ -97,12 +84,8 @@ func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 	to, ok := request.Params.Arguments["to"].(string)
 
 	if !ok {
-		return nil, errors.New("name must be a string")
+		return nil, errors.New("the to parameter is bad!")
 	}
-
-	//if !ok {
-	//	return mcp.NewToolResultError("to and form must be strings"), nil
-	//}
 
 	from, ok := request.Params.Arguments["from"].(string)
 
@@ -110,20 +93,13 @@ func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 		return nil, errors.New("name must be a string")
 	}
 
-	//if !ok {
-	//	return mcp.NewToolResultError("to and form must be strings"), nil
-	//}
-
 	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
 	cmd := exec.Command("swechaind", "tx", "bank", "send", from, to, "111token", "--from", from, "--output", "json", "--yes")
 
 	output, err := cmd.Output()
 	if err != nil {
-		//return mcp.NewToolResultError(err.Error()), nil
 		return nil, errors.New("name must be a string")
 	}
-	//content := string(output)
 	content := string(output)
-
 	return mcp.NewToolResultText(content), nil
 }
