@@ -20,16 +20,50 @@ import (
 //TODO  list-auction List all auction
 //TODO  list-bid     List all bid
 
+//TODO swechaind keys list
+
 func main() {
 	// Create MCP server
 	s := server.NewMCPServer(
 		"swechain-mcp-server",
 		"1.0.0",
 	)
+
+	///
 	/// Start Tools
-	// Add a tool
+	///
+
+	//
+	// mem tool
+	//
+	mem_tool := mcp.NewTool("memory",
+		mcp.WithDescription("Memory enables adaptive decision-making, allowing you to adjust its strategies based on accumulated knowledge"),
+		mcp.WithString("query",
+			mcp.Required(),
+			mcp.Description("query the memory for real-time information"),
+		),
+	)
+
+	s.AddTool(mem_tool, memHandler)
+
+	//
+	// balance tool
+	//
+	balance_tool := mcp.NewTool("balance",
+		mcp.WithDescription("gets a balance for an account"),
+		mcp.WithString("account",
+			mcp.Required(),
+			mcp.Description("account to query the balance"),
+		),
+	)
+
+	s.AddTool(balance_tool, balanceHandler)
+
+	//
+	// send tool
+	//
 	send_tool := mcp.NewTool("send",
-		mcp.WithDescription("sends tokens from one account to another"),
+		mcp.WithDescription("sends tokens from one account's address to another"),
 		mcp.WithString("from",
 			mcp.Required(),
 			mcp.Description("sender account address"),
@@ -39,27 +73,40 @@ func main() {
 			mcp.Description("receiver account address"),
 		),
 	)
-	// Add a tool handler
 	s.AddTool(send_tool, sendHandler)
-	// End of send_tool //
 
-	// Add balance tool
-	balance_tool := mcp.NewTool("balance",
-		mcp.WithDescription("gets a balance for an account"),
-		mcp.WithString("account",
-			mcp.Required(),
-			mcp.Description("account to query the balance"),
-		),
+	//
+	// keys tool
+	//
+	keys_tool := mcp.NewTool("keys",
+		mcp.WithDescription("get account information such as account address, account name, account public key"),
 	)
-	// Add a balance tool handler
-	s.AddTool(balance_tool, balanceHandler)
-	// End Tools
+	s.AddTool(keys_tool, keysHandler)
+
 	fmt.Println("🚀 Server started")
 	// Start the stdio server
 	if err := server.ServeStdio(s); err != nil {
 		fmt.Printf("😡 Server error: %v\n", err)
 	}
 	fmt.Println("👋 Server stopped")
+}
+
+func memHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+
+	// ./bin/feedback --env ghissuemarket --mode infer --query "What are the details of auction 456?"
+	query, ok := request.Params.Arguments["query"].(string)
+	if !ok {
+		return nil, errors.New("Error: mem query parameter")
+	}
+
+	cmd := exec.Command("./bin/feedback", "--env", "ghissuemarket", "--mode", "infer", "--query", query)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, errors.New("Error: rag/memory")
+	}
+	content := string(output)
+	return mcp.NewToolResultText(content), nil
 }
 
 func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -99,6 +146,20 @@ func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, errors.New("name must be a string")
+	}
+	content := string(output)
+	return mcp.NewToolResultText(content), nil
+}
+
+func keysHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	//  swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
+	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
+	// swechaind keys list
+	cmd := exec.Command("swechaind", "keys", "list")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, errors.New("Error: `swechain keys list`")
 	}
 	content := string(output)
 	return mcp.NewToolResultText(content), nil

@@ -184,6 +184,7 @@ func (a *Agent) Run(ctx context.Context, userPrompt string) error {
 				}
 				contentForThePrompt += text
 				fmt.Println(contentForThePrompt)
+				fmt.Println("ReAct here?")
 			}
 		}
 		return nil

@@ -20,9 +20,10 @@ func NewConfig() *Config {
 		OllamaHost:    "http://127.0.0.1:11434",
 		MCPServerPath: "./bin/swechain-mcp-server",
 		ChatModel:     "llama3.2:3b",
-		ToolsModel:    "llama3.2:3b-instruct-fp16",
-		AgentName:     "agent",
-		AgentVersion:  "1.0.0",
+		//ToolsModel:    "llama3.2:3b-instruct-fp16",
+		ToolsModel:   "qwen2.5-coder:14b",
+		AgentName:    "agent",
+		AgentVersion: "1.0.0",
 	}
 
 	// Override with environment variables if they exist
