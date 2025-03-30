@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -117,126 +116,158 @@ func registerTools(s *server.MCPServer) {
 		),
 	)
 	s.AddTool(createBidTool, createBidHandler)
+	/*
+		// Token tool
+		tokenTool := mcp.NewTool("token",
+			mcp.WithDescription("Transfer tokens between accounts"),
+			mcp.WithString("from",
+				mcp.Required(),
+				mcp.Description("Sender's blockchain address"),
+			),
+			mcp.WithString("to",
+				mcp.Required(),
+				mcp.Description("Recipient's blockchain address"),
+			),
+			mcp.WithString("amount",
+				mcp.Required(),
+				mcp.Description("Amount of tokens to send"),
+			),
+		)
+		s.AddTool(tokenTool, tokenHandler)
+	*/
+	winnerTool := mcp.NewTool("winner",
 
-	// Token tool
-	tokenTool := mcp.NewTool("token",
-		mcp.WithDescription("Transfer tokens between accounts"),
-		mcp.WithString("from",
-			mcp.Required(),
-			mcp.Description("Sender's blockchain address"),
-		),
-		mcp.WithString("to",
-			mcp.Required(),
-			mcp.Description("Recipient's blockchain address"),
-		),
-		mcp.WithString("amount",
-			mcp.Required(),
-			mcp.Description("Amount of tokens to send"),
-		),
-	)
-	s.AddTool(tokenTool, tokenHandler)
-	winnderTool := mcp.NewTool("winnder-auction",
+		mcp.WithDescription("Update auction status to closed and pay the winner his bid amount"),
 
-		mcp.WithDescription("Update the winnder of an auction"),
+		mcp.WithString("auctionId",
+			mcp.Required(),
+			mcp.Description("The auctionId of the auction that you intend to close"),
+		),
+
 		mcp.WithString("status",
 			mcp.Required(),
 			mcp.Description("Updated status to closed"),
 		),
-		mcp.WithString("winner",
-			mcp.Description("update with the winner bid address"),
+
+		mcp.WithString("issue",
+			mcp.Required(),
+			mcp.Description("issue of the auction"),
 		),
+
+		mcp.WithString("description",
+			mcp.Required(),
+			mcp.Description("auction description"),
+		),
+
+		mcp.WithString("winner",
+			mcp.Description("update with the winner bidder address"),
+		),
+
 		mcp.WithString("from",
 			mcp.Required(),
 			mcp.Description("the address of the auction creator"),
 		),
+
+		/*
+			mcp.WithString("from",
+				mcp.Required(),
+				mcp.Description("Sender's blockchain address"),
+			),
+		*/
+
+		mcp.WithString("to",
+			mcp.Required(),
+			mcp.Description("Recipient's blockchain address"),
+		),
+
+		mcp.WithString("amount",
+			mcp.Required(),
+			mcp.Description("Amount of tokens to send the bidder, thats his bid amount"),
+		),
 	)
-	s.AddTool(winnderTool, winnerHandler)
+	s.AddTool(winnerTool, winnerHandler)
+}
+
+// swechaind tx issuemarket update-auction 1 "BUG-123" "Fix critical security vulnerability" "closed" bob --from alice --yes --output json;
+
+// swechaind tx bank send  cosmos1ztfcwxc9kadjzur9mvxayjycdtmpldjaujgt2f  cosmos1r3j0jnkpzgn5kwkkrw98lh2v753r2egg95p0k3 100token --from cosmos1ztfcwxc9kadjzur9mvxayjycdtmpldjaujgt2f
+
+func winnerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+
+	params := []string{
+		"tx", "issuemarket", "update-bid",
+		request.Params.Arguments["auctionId"].(string),
+		request.Params.Arguments["issue"].(string),
+		request.Params.Arguments["description"].(string),
+		request.Params.Arguments["status"].(string),
+		request.Params.Arguments["winner"].(string),
+		"--from", request.Params.Arguments["from"].(string),
+		"--yes",
+		"--output", "json",
+	}
+
+	output, err := runCommand("swechaind", params...)
+	if err != nil {
+		log.Printf("Create bid failed: %v", err)
+	}
+	print(output)
+
+	params_bank := []string{
+		"tx", "bank", "send",
+		request.Params.Arguments["from"].(string),
+		request.Params.Arguments["to"].(string),
+		request.Params.Arguments["amount"].(string),
+		"--from", request.Params.Arguments["from"].(string),
+		"--yes",
+		"--output", "json",
+	}
+
+	output_bank, err := runCommand("swechaind", params_bank...)
+	if err != nil {
+		log.Printf("send failed: %v", err)
+	}
+
+	return mcp.NewToolResultText(string(output_bank)), nil
 }
 
 /*
-func winnerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
+func tokenHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 
 		CallToolResult, error) {
-		args, err := validateAuctionParams(request)
-		if err != nil {
-			return returnErrorWithFeedback(err.Error())
+		to, ok := request.Params.Arguments["to"].(string)
+		if !ok {
+			log.Printf("token to")
+		}
+
+		from, ok := request.Params.Arguments["from"].(string)
+		if !ok {
+			log.Printf("token from")
+		}
+
+		amount, ok := request.Params.Arguments["amount"].(string)
+		if !ok {
+			log.Printf("token amount")
 		}
 
 		output, err := runCommand(
 			"swechaind",
-			append([]string{"tx", "issuemarket", "update-auction"}, args...)...,
+			"tx", "bank", "send",
+			strings.ToLower(from),
+			strings.ToLower(to),
+			amount,
+			"--from", strings.ToLower(from),
+			"--output", "json",
+			"--yes",
 		)
+
 		if err != nil {
-			log.Printf("Update auction failed: %v", err)
-			return returnErrorWithFeedback("Error: update-auction failed")
+			log.Printf("feedback failed: %v", err)
 		}
 
-		return withFeedback(output)
+		//return withFeedback(output)
+		return mcp.NewToolResultText(string(output)), nil
 	}
 */
-
-func winnerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments directly from the request
-	args := []string{}
-
-	// Add auction ID if provided
-	if auctionID, ok := request.Params.Arguments["auction_id"].(string); ok {
-		args = append(args, auctionID)
-	}
-
-	// Add other necessary parameters as needed
-	// For example, if there's a winner parameter:
-	if winner, ok := request.Params.Arguments["winner"].(string); ok {
-		args = append(args, "--winner", winner)
-	}
-
-	output, err := runCommand(
-		"swechaind",
-		append([]string{"tx", "issuemarket", "update-auction"}, args...)...,
-	)
-	if err != nil {
-		log.Printf("Update auction failed: %v", err)
-		return nil, fmt.Errorf("Error: update-auction failed: %v", err)
-	}
-	return mcp.NewToolResultText(string(output)), nil
-}
-
-func tokenHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
-	CallToolResult, error) {
-	to, ok := request.Params.Arguments["to"].(string)
-	if !ok {
-		log.Printf("token to")
-	}
-
-	from, ok := request.Params.Arguments["from"].(string)
-	if !ok {
-		log.Printf("token from")
-	}
-
-	amount, ok := request.Params.Arguments["amount"].(string)
-	if !ok {
-		log.Printf("token amount")
-	}
-
-	output, err := runCommand(
-		"swechaind",
-		"tx", "bank", "send",
-		strings.ToLower(from),
-		strings.ToLower(to),
-		amount,
-		"--from", strings.ToLower(from),
-		"--output", "json",
-		"--yes",
-	)
-
-	if err != nil {
-		log.Printf("feedback failed: %v", err)
-	}
-
-	//return withFeedback(output)
-	return mcp.NewToolResultText(string(output)), nil
-}
-
 func feedbackHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	output, err := runCommand(
 		"./bin/feedback",
