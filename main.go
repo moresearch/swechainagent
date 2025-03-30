@@ -122,6 +122,10 @@ func main() {
 
 	// Create an LLM instance
 	llm, err := openai.New()
+	//llm, err := ollama.New(ollama.WithModel("smollm2:1.7b"))
+	//llm, err := ollama.New(ollama.WithModel("qwen2.5-coder:32b"))
+	//llm, err := ollama.New(ollama.WithModel("llama3.2:3b-instruct-fp16"))
+
 	if err != nil {
 		log.Fatal(err)
 	}
