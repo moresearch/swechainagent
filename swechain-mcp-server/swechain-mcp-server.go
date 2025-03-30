@@ -1,207 +1,288 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// swechaind query bank balances alice --output json;
-//TODO generate report from trajs
-//TODO analyze generated image report using multimodal model.
-//TODO get address tool e.g. swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
+const (
+	commandTimeout = 10 * time.Second
+)
 
-//TODO  get-auction  Gets a auction by id
-//TODO  get-bid      Gets a bid
-//TODO  list-auction List all auction
-//TODO  list-bid     List all bid
+func init() {
+	log.SetOutput(os.Stdout)
+}
 
-//TODO swechaind keys list
+// runCommand executes a command with timeout and returns combined output
+func runCommand(name string, arg ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, arg...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	log.Printf("Executing command: %s %v", name, arg)
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("command failed: %v\nSTDOUT: %s\nSTDERR: %s",
+			err, stdout.String(), stderr.String())
+	}
+
+	return stdout.String(), nil
+}
 
 func main() {
-	// Create MCP server
 	s := server.NewMCPServer(
 		"swechain-mcp-server",
 		"1.0.0",
 	)
 
-	///
-	/// Start Tools
-	///
+	// Register all tools
+	registerTools(s)
 
-	//
-	// mem tool
-	//
-	mem_tool := mcp.NewTool("memory",
-		mcp.WithDescription("Memory enables adaptive decision-making, allowing you to adjust its strategies based on accumulated knowledge"),
-		mcp.WithString("query",
-			mcp.Required(),
-			mcp.Description("query the memory for real-time information"),
-		),
-		mcp.WithString("agent_name",
-			mcp.Required(),
-			mcp.Description("agent_name is your given name, and it is used to RAG over your memories"),
-		),
+	log.Println("Server started")
+	if err := server.ServeStdio(s); err != nil {
+		log.Printf("Server error: %v\n", err)
+	}
+	log.Println("Server stopped")
+}
+
+func registerTools(s *server.MCPServer) {
+
+	// Feedback tool
+	feedbackTool := mcp.NewTool("feedback",
+		mcp.WithDescription("Get feedback from the swechain blockchain enviroment for observations before and after taking actions"),
 	)
+	s.AddTool(feedbackTool, feedbackHandler)
 
-	s.AddTool(mem_tool, memHandler)
-
-	//
-	// balance tool
-	//
-	balance_tool := mcp.NewTool("balance",
-		mcp.WithDescription("gets a balance for an account"),
-		mcp.WithString("account",
+	// Auction tools
+	createAuctionTool := mcp.NewTool("create-auction",
+		mcp.WithDescription("Create new auction"),
+		mcp.WithString("issue",
 			mcp.Required(),
-			mcp.Description("account to query the balance"),
+			mcp.Description("Auction issue identifier, that is the issue that is being auction as part of software engineering outsourcing"),
 		),
-	)
-
-	s.AddTool(balance_tool, balanceHandler)
-
-	//
-	// send tool
-	//
-	send_tool := mcp.NewTool("send",
-		mcp.WithDescription("sends an amount from one account's address to another, use this tool when trying to send tokens to another address from your address"),
+		mcp.WithString("description",
+			mcp.Required(),
+			mcp.Description("Auction description"),
+		),
+		mcp.WithString("status",
+			mcp.Required(),
+			mcp.Description("Auction status can be open or closed"),
+		),
+		mcp.WithString("winner",
+			mcp.Required(),
+			mcp.Description("Auction winner, for a new auction keep it TBD until you know the address of the winner"),
+		),
 		mcp.WithString("from",
 			mcp.Required(),
-			mcp.Description("your account address"),
+			mcp.Description("Auction creator, your address"),
 		),
-		mcp.WithString("to",
+	)
+	s.AddTool(createAuctionTool, createAuctionHandler)
+
+	createBidTool := mcp.NewTool("create-bid",
+		mcp.WithDescription("Place bid on auction"),
+		mcp.WithString("auctionId",
 			mcp.Required(),
-			mcp.Description("account address you want to send to"),
+			mcp.Description("Auction identifier"),
+		),
+		mcp.WithString("bidder",
+			mcp.Required(),
+			mcp.Description("Bidder account name"),
 		),
 		mcp.WithString("amount",
 			mcp.Required(),
-			mcp.Description("amount to send, example: it just numbers like 100 or 200 or 300, etc."),
+			mcp.Description("Bid amount"),
 		),
-	)
-	s.AddTool(send_tool, sendHandler)
-
-	//
-	// keys tool
-	//
-	addr_tool := mcp.NewTool("addr",
-		mcp.WithDescription("give an account name to get the account address"),
-
-		mcp.WithString("account_name",
+		mcp.WithString("description",
 			mcp.Required(),
-			mcp.Description("the name of the person you want to get its address"),
+			mcp.Description("Bid description"),
+		),
+		mcp.WithString("from",
+			mcp.Required(),
+			mcp.Description("Transaction sender"),
 		),
 	)
-	s.AddTool(addr_tool, addrHandler)
+	s.AddTool(createBidTool, createBidHandler)
 
-	fmt.Println("🚀 Server started")
-	// Start the stdio server
-	if err := server.ServeStdio(s); err != nil {
-		fmt.Printf("😡 Server error: %v\n", err)
-	}
-	fmt.Println("👋 Server stopped")
+	// Token tool
+	tokenTool := mcp.NewTool("token",
+		mcp.WithDescription("Transfer tokens between accounts"),
+		mcp.WithString("from",
+			mcp.Required(),
+			mcp.Description("Sender's blockchain address"),
+		),
+		mcp.WithString("to",
+			mcp.Required(),
+			mcp.Description("Recipient's blockchain address"),
+		),
+		mcp.WithString("amount",
+			mcp.Required(),
+			mcp.Description("Amount of tokens to send"),
+		),
+	)
+	s.AddTool(tokenTool, tokenHandler)
+	winnderTool := mcp.NewTool("winnder-auction",
+
+		mcp.WithDescription("Update the winnder of an auction"),
+		mcp.WithString("status",
+			mcp.Required(),
+			mcp.Description("Updated status to closed"),
+		),
+		mcp.WithString("winner",
+			mcp.Description("update with the winner bid address"),
+		),
+		mcp.WithString("from",
+			mcp.Required(),
+			mcp.Description("the address of the auction creator"),
+		),
+	)
+	s.AddTool(winnderTool, winnerHandler)
 }
 
-func memHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+/*
+func winnerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 
-	// ./bin/feedback --env ghissuemarket --mode infer --query "What are the details of auction 456?"
-	query, ok := request.Params.Arguments["query"].(string)
-	if !ok {
-		return nil, errors.New("Error: mem query parameter")
+		CallToolResult, error) {
+		args, err := validateAuctionParams(request)
+		if err != nil {
+			return returnErrorWithFeedback(err.Error())
+		}
+
+		output, err := runCommand(
+			"swechaind",
+			append([]string{"tx", "issuemarket", "update-auction"}, args...)...,
+		)
+		if err != nil {
+			log.Printf("Update auction failed: %v", err)
+			return returnErrorWithFeedback("Error: update-auction failed")
+		}
+
+		return withFeedback(output)
+	}
+*/
+
+func winnerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments directly from the request
+	args := []string{}
+
+	// Add auction ID if provided
+	if auctionID, ok := request.Params.Arguments["auction_id"].(string); ok {
+		args = append(args, auctionID)
 	}
 
-	agent_name, ok := request.Params.Arguments["agent_name"].(string)
-	if !ok {
-		return nil, errors.New("Error: mem agent_name parameter")
+	// Add other necessary parameters as needed
+	// For example, if there's a winner parameter:
+	if winner, ok := request.Params.Arguments["winner"].(string); ok {
+		args = append(args, "--winner", winner)
 	}
 
-	//cmd := exec.Command("./bin/feedback", "--env", "ghissuemarket", "--mode", "infer", "--query", query)
-	cmd := exec.Command("./bin/feedback", "--env", strings.ToLower(agent_name), "--mode", "infer", "--query", query)
-	//cmd := exec.Command("./bin/feedback", "--env", "bob", "--mode", "infer", "--query", query)
-
-	output, err := cmd.Output()
-	fmt.Println(output)
+	output, err := runCommand(
+		"swechaind",
+		append([]string{"tx", "issuemarket", "update-auction"}, args...)...,
+	)
 	if err != nil {
-		fmt.Println(err)
-		return nil, errors.New("Error: rag/memory")
+		log.Printf("Update auction failed: %v", err)
+		return nil, fmt.Errorf("Error: update-auction failed: %v", err)
 	}
-	content := string(output)
-	return mcp.NewToolResultText(content), nil
+	return mcp.NewToolResultText(string(output)), nil
 }
 
-func balanceHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
-	account, ok := request.Params.Arguments["account"].(string)
-	if !ok {
-		return nil, errors.New("account must be a string")
-	}
-	//cmd := exec.Command("/home/maf/go/bin/swechaind query bank balances", "-s", account, "--output json")
-	cmd := exec.Command("swechaind", "query", "bank", "balances", account, "--output", "json")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, errors.New("Error: swechaind query bank balances")
-	}
-	content := string(output)
-	return mcp.NewToolResultText(content), nil
-}
-
-func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
+func tokenHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
+	CallToolResult, error) {
 	to, ok := request.Params.Arguments["to"].(string)
 	if !ok {
-		return nil, errors.New("the 'to' parameter is bad!")
+		log.Printf("token to")
 	}
 
 	from, ok := request.Params.Arguments["from"].(string)
 	if !ok {
-		return nil, errors.New("the 'from' parameter is bad")
+		log.Printf("token from")
 	}
 
 	amount, ok := request.Params.Arguments["amount"].(string)
 	if !ok {
-		return nil, errors.New("the 'amount' parameter is bad")
+		log.Printf("token amount")
 	}
 
-	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
-	// swechaind tx bank send <from_address> <to_address> <amount> --chain-id=<chain_id> --fees=<fee_amount> --gas=<gas_limit> --yes
-	//cmd := exec.Command("swechaind", "tx", "bank", "send", from, to, "111token", "--from", from, "--output", "json", "--yes")
-	cmd := exec.Command("swechaind", "tx", "bank", "send", strings.ToLower(from), strings.ToLower(to), amount, "--from", strings.ToLower(from), "--output", "json", "--yes")
+	output, err := runCommand(
+		"swechaind",
+		"tx", "bank", "send",
+		strings.ToLower(from),
+		strings.ToLower(to),
+		amount,
+		"--from", strings.ToLower(from),
+		"--output", "json",
+		"--yes",
+	)
 
-	output, err := cmd.Output()
 	if err != nil {
-		return nil, errors.New("Error: all addresses are Cosmos sdk addresses like cosmos1fgs3u5hvkrh50y7nphrqyjur27jaahh4h3c86w which is a Bech32-encoded, alphanumeric string with a prefix, uniquely identifying an account on a Cosmos-based blockchain.")
+		log.Printf("feedback failed: %v", err)
 	}
-	content := string(output)
-	return mcp.NewToolResultText(content), nil
+
+	//return withFeedback(output)
+	return mcp.NewToolResultText(string(output)), nil
 }
 
-func addrHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	account_name, ok := request.Params.Arguments["account_name"].(string)
-	if !ok {
-		return nil, errors.New("use your intended 'account_name' to get its valid address!")
-	}
-
-	//  swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
-	// swechaind tx bank send [from_key_or_address] [to_address] [amount] [flags]
-	// swechaind keys list
-	//  swechaind keys list --output json | jq '.[] | select(.name == "bob") | .address'
-
-	//cmd := exec.Command("swechaind keys list --output json | jq '.[] | select(.name == ", account_name, ") | .address'")
-
-	//cmdString := fmt.Sprintf("/home/maf/go/bin/swechaind keys list --output json | jq '.[] | select(.name == \"%s\") | .address'", accountName)
-	// Execute the command using a shell
-	//cmd := exec.Command("bash", "-c", cmdString)
-
-	//cmd := exec.Command("swechaind", "keys", "list")
-	cmd := exec.Command("swechaind", "keys", "show", strings.ToLower(account_name), "-a")
-
-	output, err := cmd.Output()
+func feedbackHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	output, err := runCommand(
+		"./bin/feedback",
+	)
 	if err != nil {
-		return nil, errors.New("Error: if you use a valid account_name, you will get a valid address to be able to send to")
+		log.Printf("feedback failed: %v", err)
 	}
-	content := string(output)
-	return mcp.NewToolResultText(content), nil
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func createAuctionHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+
+	params := []string{
+		"tx", "issuemarket", "create-auction",
+		request.Params.Arguments["issue"].(string),
+		request.Params.Arguments["description"].(string),
+		request.Params.Arguments["status"].(string),
+		request.Params.Arguments["winner"].(string),
+		"--from", request.Params.Arguments["from"].(string),
+		"--yes",
+		"--output", "json",
+	}
+
+	output, err := runCommand("swechaind", params...)
+	if err != nil {
+		log.Printf("Create auction failed: %v", err)
+	}
+
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func createBidHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	params := []string{
+		"tx", "issuemarket", "create-bid",
+		request.Params.Arguments["auctionId"].(string),
+		request.Params.Arguments["bidder"].(string),
+		request.Params.Arguments["amount"].(string),
+		request.Params.Arguments["description"].(string),
+		"--from", request.Params.Arguments["from"].(string),
+		"--yes",
+		"--output", "json",
+	}
+
+	output, err := runCommand("swechaind", params...)
+	if err != nil {
+		log.Printf("Create bid failed: %v", err)
+	}
+	return mcp.NewToolResultText(string(output)), nil
 }
