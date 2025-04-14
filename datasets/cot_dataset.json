@@ -1,0 +1,287 @@
+[
+  {
+    "toolbox": [
+      {
+        "description": "Update auction status to closed and also pay the chosen and accepted bid by transferring tokens to the address of the bidder who made the bid on the auction, tokens of his exact bid amount. Only use this tool if and only if there are any bids on that specific auction.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "auctionId": { "description": "The auctionId of the auction that you intend to close", "type": "string" },
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "issue": { "description": "Issue of the auction", "type": "string" },
+            "status": { "description": "Updated status to closed", "type": "string" },
+            "winner": { "description": "Update with the winner bidder address", "type": "string" }
+          },
+          "required": ["auctionId", "status", "issue", "description", "from"]
+        },
+        "name": "close-auction"
+      },
+      {
+        "description": "Place bid on auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Bid amount", "type": "string" },
+            "auctionId": { "description": "Auction identifier", "type": "string" },
+            "bidder": { "description": "Bidder account name", "type": "string" },
+            "description": { "description": "Bid description", "type": "string" },
+            "from": { "description": "Transaction sender", "type": "string" }
+          },
+          "required": ["auctionId", "bidder", "amount", "description", "from"]
+        },
+        "name": "create-bid"
+      },
+      {
+        "description": "Ask specific questions regarding the SweChain blockchain and environment feedback, e.g., 'Is there any open auction that I can bid on?' or 'Should I close any of my own auctions?'",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about the environment that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "feedbackQA"
+      },
+      {
+        "description": "Ask specific questions regarding your issues?",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about your issues that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "issueQA"
+      },
+      {
+        "description": "Create new auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "Auction creator, your address", "type": "string" },
+            "issue": { "description": "Auction issue identifier, that is the issue being auctioned as part of software engineering outsourcing", "type": "string" },
+            "status": { "description": "Auction status can be open or closed", "type": "string" },
+            "winner": { "description": "Auction winner, for a new auction keep it TBD until you know the address of the winner", "type": "string" }
+          },
+          "required": ["issue", "description", "status", "winner", "from"]
+        },
+        "name": "open-auction"
+      },
+      {
+        "description": "Pay bidder for your closed auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Amount of tokens to send the bidder, that's his bid amount", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "to": { "description": "The address of the winner bidder who made the bid on the auction. Important: this must never be equal to the address of the auctioneer who created the bid", "type": "string" }
+          },
+          "required": ["from", "to", "amount"]
+        },
+        "name": "pay"
+      }
+    ],
+    "objective": "Close an auction and pay the winning bidder.",
+    "chosen_tool": {
+      "tool_name": "close-auction",
+      "input": {
+        "auctionId": "AUCTION123",
+        "description": "Auction for software development issue #456",
+        "from": "0xCreatorAddress123",
+        "issue": "ISSUE456",
+        "status": "closed",
+        "winner": "0xBidderAddress789"
+      }
+    }
+  },
+  {
+    "toolbox": [
+      {
+        "description": "Update auction status to closed and also pay the chosen and accepted bid by transferring tokens to the address of the bidder who made the bid on the auction, tokens of his exact bid amount. Only use this tool if and only if there are any bids on that specific auction.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "auctionId": { "description": "The auctionId of the auction that you intend to close", "type": "string" },
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "issue": { "description": "Issue of the auction", "type": "string" },
+            "status": { "description": "Updated status to closed", "type": "string" },
+            "winner": { "description": "Update with the winner bidder address", "type": "string" }
+          },
+          "required": ["auctionId", "status", "issue", "description", "from"]
+        },
+        "name": "close-auction"
+      },
+      {
+        "description": "Place bid on auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Bid amount", "type": "string" },
+            "auctionId": { "description": "Auction identifier", "type": "string" },
+            "bidder": { "description": "Bidder account name", "type": "string" },
+            "description": { "description": "Bid description", "type": "string" },
+            "from": { "description": "Transaction sender", "type": "string" }
+          },
+          "required": ["auctionId", "bidder", "amount", "description", "from"]
+        },
+        "name": "create-bid"
+      },
+      {
+        "description": "Ask specific questions regarding the SweChain blockchain and environment feedback, e.g., 'Is there any open auction that I can bid on?' or 'Should I close any of my own auctions?'",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about the environment that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "feedbackQA"
+      },
+      {
+        "description": "Ask specific questions regarding your issues?",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about your issues that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "issueQA"
+      },
+      {
+        "description": "Create new auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "Auction creator, your address", "type": "string" },
+            "issue": { "description": "Auction issue identifier, that is the issue being auctioned as part of software engineering outsourcing", "type": "string" },
+            "status": { "description": "Auction status can be open or closed", "type": "string" },
+            "winner": { "description": "Auction winner, for a new auction keep it TBD until you know the address of the winner", "type": "string" }
+          },
+          "required": ["issue", "description", "status", "winner", "from"]
+        },
+        "name": "open-auction"
+      },
+      {
+        "description": "Pay bidder for your closed auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Amount of tokens to send the bidder, that's his bid amount", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "to": { "description": "The address of the winner bidder who made the bid on the auction. Important: this must never be equal to the address of the auctioneer who created the bid", "type": "string" }
+          },
+          "required": ["from", "to", "amount"]
+        },
+        "name": "pay"
+      }
+    ],
+    "objective": "Place a competitive bid on an open auction.",
+    "chosen_tool": {
+      "tool_name": "create-bid",
+      "input": {
+        "auctionId": "AUCTION456",
+        "amount": "200",
+        "bidder": "0xBidderAddress789",
+        "description": "Competitive bid for resolving authentication module bug",
+        "from": "0xBidderAddress789"
+      }
+    }
+  },
+  {
+    "toolbox": [
+      {
+        "description": "Update auction status to closed and also pay the chosen and accepted bid by transferring tokens to the address of the bidder who made the bid on the auction, tokens of his exact bid amount. Only use this tool if and only if there are any bids on that specific auction.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "auctionId": { "description": "The auctionId of the auction that you intend to close", "type": "string" },
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "issue": { "description": "Issue of the auction", "type": "string" },
+            "status": { "description": "Updated status to closed", "type": "string" },
+            "winner": { "description": "Update with the winner bidder address", "type": "string" }
+          },
+          "required": ["auctionId", "status", "issue", "description", "from"]
+        },
+        "name": "close-auction"
+      },
+      {
+        "description": "Place bid on auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Bid amount", "type": "string" },
+            "auctionId": { "description": "Auction identifier", "type": "string" },
+            "bidder": { "description": "Bidder account name", "type": "string" },
+            "description": { "description": "Bid description", "type": "string" },
+            "from": { "description": "Transaction sender", "type": "string" }
+          },
+          "required": ["auctionId", "bidder", "amount", "description", "from"]
+        },
+        "name": "create-bid"
+      },
+      {
+        "description": "Ask specific questions regarding the SweChain blockchain and environment feedback, e.g., 'Is there any open auction that I can bid on?' or 'Should I close any of my own auctions?'",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about the environment that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "feedbackQA"
+      },
+      {
+        "description": "Ask specific questions regarding your issues?",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "question": { "description": "A question about your issues that can help you decide your next action", "type": "string" }
+          },
+          "required": ["question"]
+        },
+        "name": "issueQA"
+      },
+      {
+        "description": "Create new auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": { "description": "Auction description", "type": "string" },
+            "from": { "description": "Auction creator, your address", "type": "string" },
+            "issue": { "description": "Auction issue identifier, that is the issue being auctioned as part of software engineering outsourcing", "type": "string" },
+            "status": { "description": "Auction status can be open or closed", "type": "string" },
+            "winner": { "description": "Auction winner, for a new auction keep it TBD until you know the address of the winner", "type": "string" }
+          },
+          "required": ["issue", "description", "status", "winner", "from"]
+        },
+        "name": "open-auction"
+      },
+      {
+        "description": "Pay bidder for your closed auction",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "amount": { "description": "Amount of tokens to send the bidder, that's his bid amount", "type": "string" },
+            "from": { "description": "The address of the auction creator", "type": "string" },
+            "to": { "description": "The address of the winner bidder who made the bid on the auction. Important: this must never be equal to the address of the auctioneer who created the bid", "type": "string" }
+          },
+          "required": ["from", "to", "amount"]
+        },
+        "name": "pay"
+      }
+    ],
+    "objective": "Ask whether there are open auctions available for bidding.",
+    "chosen_tool": {
+      "tool_name": "feedbackQA",
+      "input": {
+        "question": "Are there any open auctions that I can place a bid on?"
+      }
+    }
+  }
+]

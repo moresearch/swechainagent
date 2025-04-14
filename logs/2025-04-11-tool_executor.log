@@ -1,0 +1,46 @@
+18:54:46 main4.go:75: Starting SWEChain Tool Executor
+18:54:46 main4.go:591: Iteration 1 starting
+18:56:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+18:56:46 main4.go:591: Iteration 2 starting
+18:58:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+18:58:46 main4.go:591: Iteration 3 starting
+19:00:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:00:46 main4.go:591: Iteration 4 starting
+19:02:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:02:46 main4.go:591: Iteration 5 starting
+19:04:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:04:46 main4.go:591: Iteration 6 starting
+19:06:46 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:06:46 main4.go:591: Iteration 7 starting
+19:08:47 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:08:47 main4.go:591: Iteration 8 starting
+19:10:47 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:10:47 main4.go:591: Iteration 9 starting
+19:11:27 main4.go:591: Iteration 10 starting
+19:13:27 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:13:27 main4.go:591: Iteration 11 starting
+19:14:05 main4.go:653: Tool error: text is missing
+19:14:05 main4.go:591: Iteration 12 starting
+19:39:39 main4.go:75: Starting SWEChain Tool Executor
+19:39:39 main4.go:591: Iteration 1 starting
+19:41:39 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:41:39 main4.go:591: Iteration 2 starting
+19:43:34 main4.go:591: Iteration 3 starting
+19:45:34 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:45:34 main4.go:591: Iteration 4 starting
+19:46:30 main4.go:591: Iteration 5 starting
+19:50:06 main4.go:688: Tool extraction error: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:50:06 main4.go:591: Iteration 6 starting
+19:52:06 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:52:06 main4.go:591: Iteration 7 starting
+19:54:31 main4.go:688: Tool extraction error: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:54:31 main4.go:591: Iteration 8 starting
+19:56:31 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:56:31 main4.go:591: Iteration 9 starting
+19:59:40 main4.go:688: Tool extraction error: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+19:59:40 main4.go:591: Iteration 10 starting
+20:03:29 main4.go:688: Tool extraction error: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+20:03:29 main4.go:591: Iteration 11 starting
+20:05:30 main4.go:619: Error in reasoning: Post "http://[::]:11434/api/chat": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+20:05:30 main4.go:591: Iteration 12 starting
+20:08:15 main4.go:102: Session failed: max iterations reached
