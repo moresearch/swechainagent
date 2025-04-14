@@ -77,7 +77,8 @@ func main() {
 
 	// Configuration with alternating prompts and loop delay
 	config := Config{
-		Model:            "llama3.1:8b-instruct-q8_0",
+		//Model:            "llama3.1:8b-instruct-q8_0",
+		Model:            "hermes3:8b",
 		OllamaURL:        "http://localhost:11434",
 		MCP_Server:       os.Getenv("MCP_SERVER"),
 		MaxStepsPerCycle: 15, // Max steps within a single cycle
