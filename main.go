@@ -13,7 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/openai"
+	"github.com/tmc/langchaingo/llms/ollama"
 )
 
 // ToolChoice represents the LLM's decision about which tool to use
@@ -46,7 +46,7 @@ func main() {
 	defer mcpClient.Close()
 
 	// Create a context with a longer timeout for the entire session
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Minute)
 	defer cancel()
 
 	// Initialize the MCP client
@@ -121,10 +121,25 @@ func main() {
 	fmt.Println(toolsInfo)
 
 	// Create an LLM instance
-	llm, err := openai.New()
+	//llm, err := openai.New()
+	//llm, err := openai.New(openai.WithModel("gpt-4o-mini"))
+	//llm, err := openai.New(openai.WithModel("gpt-4-turbo"))
+	//llm, err := anthropic.New(anthropic.WithModel("claude-3-5-sonnet-20240620"))
+	//llm, err := openai.New(openai.WithModel("deepseek-chat"),)
+
 	//llm, err := ollama.New(ollama.WithModel("smollm2:1.7b"))
 	//llm, err := ollama.New(ollama.WithModel("qwen2.5-coder:32b"))
 	//llm, err := ollama.New(ollama.WithModel("llama3.2:3b-instruct-fp16"))
+	//llm, err := ollama.New(ollama.WithModel("command-r7b:7b"))
+	//llm, err := ollama.New(ollama.WithModel("llama3.1:8b"))
+
+	//llm, err := anthropic.New(anthropic.WithModel("claude-3-7-sonnet-20250219"))
+	//llm, err := ollama.New(ollama.WithModel("deepseek-r1:14b"))
+	llm, err := ollama.New(ollama.WithModel("gemma3:12b"))
+
+	//llm, err := ollama.New(ollama.WithModel("cogito:3b"))
+	//llm, err := ollama.New(ollama.WithModel("qwen2.5:0.5b"))
+	//llm, err := cohere.New()
 
 	if err != nil {
 		log.Fatal(err)

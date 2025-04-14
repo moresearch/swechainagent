@@ -90,7 +90,8 @@ func main() {
 
 // fetchKeys executes the `keys list` command and parses the output
 func fetchKeys() []Key {
-	cmd := exec.Command(swechaindCmd, "keys", "list", "--output", "json")
+	// swechaind keys list --keyring-backend test
+	cmd := exec.Command(swechaindCmd, "keys", "list", "--keyring-backend", "test", "--output", "json")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error fetching keys: %v\n%s\n", err, string(output))
@@ -115,6 +116,7 @@ func fetchPaginatedData(module, query, dataKey string) []map[string]interface{} 
 		cmd := exec.Command(
 			swechaindCmd,
 			"query", module, query,
+			"--keyring-backend", "test",
 			"--output", "json",
 			"--page-offset", strconv.Itoa(offset),
 			"--page-limit", strconv.Itoa(pageLimit),
@@ -165,6 +167,7 @@ func fetchDenomOwners() []DenomOwner {
 	cmd := exec.Command(
 		swechaindCmd,
 		"query", "bank", "denom-owners", "token",
+		"--keyring-backend", "test",
 		"--output", "json",
 	)
 	output, err := cmd.CombinedOutput()
