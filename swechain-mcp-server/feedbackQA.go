@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/tmc/langchaingo/chains"
-	"github.com/tmc/langchaingo/llms/openai"
+	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/schema"
 )
 
@@ -38,7 +38,7 @@ func run() error {
 	enhancedQuestion := enhanceQuestionWithInstructions(originalQuestion)
 
 	// Initialize the OpenAI LLM
-	llm, err := openai.New()
+	//llm, err := openai.New()
 	//llm, err := ollama.New(ollama.WithModel("smollm2:1.7b"))
 	//llm, err := ollama.New(ollama.WithModel("deepseek-r1:14b"))
 	//llm, err := ollama.New(ollama.WithModel("granite3.2-vision:2b"))
@@ -46,7 +46,7 @@ func run() error {
 	//llm, err := ollama.New(ollama.WithModel("command-r7b:7b"))
 	//llm, err := openai.New(openai.WithModel("deepseek-chat"),)
 
-	//llm, err := ollama.New(ollama.WithModel("llama3.1:8b"))
+	llm, err := ollama.New(ollama.WithModel("llama3.1:8b"))
 	if err != nil {
 		return err
 	}
