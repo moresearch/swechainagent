@@ -182,7 +182,7 @@ func newExecutor(config Config) (*Executor, error) {
 	log.Println("INFO: MCP client created successfully.")
 
 	log.Println("INFO: Initializing MCP protocol...")
-	initCtx, cancelInit := context.WithTimeout(context.Background(), 30*time.Second)
+	initCtx, cancelInit := context.WithTimeout(context.Background(), 30000*time.Second)
 	defer cancelInit()
 	initRequest := mcp.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
@@ -208,7 +208,7 @@ func newExecutor(config Config) (*Executor, error) {
 		return nil, fmt.Errorf("invalid Ollama URL %s: %w", config.OllamaURL, err)
 	}
 
-	ollamaClientTimeout := 20 * time.Minute
+	ollamaClientTimeout := 20000 * time.Minute
 	log.Printf("INFO: Setting Ollama HTTP client timeout to %v.", ollamaClientTimeout)
 	httpClient := &http.Client{
 		Timeout: ollamaClientTimeout,
@@ -217,7 +217,7 @@ func newExecutor(config Config) (*Executor, error) {
 	log.Println("INFO: Ollama API client created.")
 
 	log.Println("INFO: Fetching available tools from MCP server...")
-	listToolsCtx, cancelList := context.WithTimeout(context.Background(), 30*time.Second)
+	listToolsCtx, cancelList := context.WithTimeout(context.Background(), 30000*time.Second)
 	defer cancelList()
 	toolsRequest := mcp.ListToolsRequest{}
 	toolsResponse, err := mcpClient.ListTools(listToolsCtx, toolsRequest)
@@ -620,7 +620,7 @@ func (e *Executor) executeTool(ctx context.Context, toolName string, args map[st
 	fetchRequest.Params.Arguments = args
 
 	log.Printf("INFO: Calling MCP tool '%s' via client...", toolName)
-	toolCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	toolCtx, cancel := context.WithTimeout(ctx, 1000*time.Minute)
 	defer cancel()
 
 	startTime := time.Now()
