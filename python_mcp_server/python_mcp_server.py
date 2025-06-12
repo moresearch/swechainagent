@@ -14,22 +14,38 @@ from pydantic import BaseModel, Field
 # MCP_SERVER_HOST: Server host address (default: 0.0.0.0)
 # MCP_SERVER_PORT: Server port (default: 8000)
 # SWECHAIND_PATH: Full path to `swechaind` executable (default: 'swechaind', assumes it's in PATH)
-# FEEDBACK_BIN_PATH: Full path to `feedback` executable (default: './bin/feedback')
-# FEEDBACK_QA_BIN_PATH: Full path to `feedbackQA` executable (default: './bin/feedbackQA')
+# FEEDBACK_BIN_PATH: Full path to `feedback` executable (default: '../bin/feedback')
+# FEEDBACK_QA_BIN_PATH: Full path to `feedbackQA` executable (default: '../bin/feedbackQA')
 # KEYRING_BACKEND: Keyring backend to use (default: 'test')
 # CHAIN_ID: Chain ID for transactions (default: 'swechain')
 # DEFAULT_FEES: Default fees for transactions (default: '200token')
 # COMMAND_TIMEOUT_SECONDS: Timeout for subprocess commands (default: 120)
-
-# Basic logging configuration
-# Ensure os and logging are imported (already done at the top of the file)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# MCP_SERVER_LOG_LEVEL: Logging level for the application (DEBUG, INFO, WARNING, ERROR, CRITICAL; default: INFO)
 
 # Application Configuration Dictionary
 CONFIG = {}
+CONFIG['LOG_LEVEL'] = os.environ.get('MCP_SERVER_LOG_LEVEL', 'INFO').upper()
+
+# Basic logging configuration
+# This needs to be configured AFTER CONFIG['LOG_LEVEL'] is set.
+log_level_str = CONFIG['LOG_LEVEL']
+numeric_log_level = getattr(logging, log_level_str, None)
+if not isinstance(numeric_log_level, int):
+    # Log a warning using a temporary basic config, as the main one isn't set yet.
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.warning(f"Invalid MCP_SERVER_LOG_LEVEL: {log_level_str}. Defaulting to INFO.")
+    numeric_log_level = logging.INFO
+    CONFIG['LOG_LEVEL'] = 'INFO' # Update CONFIG to reflect the actual level being used
+
+# Apply the determined log level
+# Using force=True if Python 3.8+ to allow re-configuration if basicConfig was implicitly called by another import.
+# For broader compatibility, setting level on root logger is also very effective.
+logging.basicConfig(level=numeric_log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
+logging.getLogger().setLevel(numeric_log_level) # Ensure root logger level is set
+
 CONFIG['SWECHAIND_PATH'] = os.environ.get('SWECHAIND_PATH', 'swechaind')
-CONFIG['FEEDBACK_BIN_PATH'] = os.environ.get('FEEDBACK_BIN_PATH', './bin/feedback')
-CONFIG['FEEDBACK_QA_BIN_PATH'] = os.environ.get('FEEDBACK_QA_BIN_PATH', './bin/feedbackQA')
+CONFIG['FEEDBACK_BIN_PATH'] = os.environ.get('FEEDBACK_BIN_PATH', '../bin/feedback') # Updated default
+CONFIG['FEEDBACK_QA_BIN_PATH'] = os.environ.get('FEEDBACK_QA_BIN_PATH', '../bin/feedbackQA') # Updated default
 CONFIG['KEYRING_BACKEND'] = os.environ.get('KEYRING_BACKEND', 'test')
 CONFIG['CHAIN_ID'] = os.environ.get('CHAIN_ID', 'swechain')
 CONFIG['DEFAULT_FEES'] = os.environ.get('DEFAULT_FEES', '200token')
@@ -40,6 +56,10 @@ try:
 except ValueError:
     logging.warning(f"Invalid COMMAND_TIMEOUT_SECONDS value '{COMMAND_TIMEOUT_STR}', using default 120 seconds.")
     CONFIG['COMMAND_TIMEOUT_SECONDS'] = 120
+    # Log the active log level early, but after basicConfig is properly set up.
+    # This specific log will use the just-configured level.
+    logging.info(f"Logging level set to {CONFIG['LOG_LEVEL']} ({numeric_log_level}) by MCP_SERVER_LOG_LEVEL.")
+
 
 # Utility function to parse and enhance swechaind errors
 def parse_swechaind_error(stderr_output: str, tool_name: str, default_fees: str, original_exception: Exception = None) -> str:
@@ -98,7 +118,7 @@ def parse_swechaind_error(stderr_output: str, tool_name: str, default_fees: str,
         match_coins = re.search(r"invalid coins:\s*([^\s\n]+)", lower_stderr)
         amount_str = match_coins.group(1) if match_coins else "provided"
         return f"Error executing tool '{tool_name}': Invalid amount/coins ('{amount_str}'). Suggestion: Ensure amounts are positive integers with correct denomination (e.g., '100token', not '100 token' or '100'). Denomination should be one word."
-    
+
     if "auction not found" in lower_stderr or "auction does not exist" in lower_stderr:
         match_id = re.search(r"auction\s+([^\s]+)\s+(not found|does not exist)", lower_stderr)
         auction_id_str = f"'{match_id.group(1)}' " if match_id else ""
@@ -120,7 +140,7 @@ def parse_swechaind_error(stderr_output: str, tool_name: str, default_fees: str,
     first_line_stderr = stderr_output.splitlines()[0] if stderr_output else "No stderr output provided to parser."
     if len(first_line_stderr) > 150:  # Truncate for brevity
         first_line_stderr = first_line_stderr[:150] + "..."
-    
+
     base_error_message = str(original_exception) if original_exception else "Unknown error during command execution."
 
     return f"Error executing tool '{tool_name}': Unexpected command failure. Details: {first_line_stderr}. Original error hint: {base_error_message}"
@@ -325,12 +345,26 @@ MCP_TOOLS_METADATA = [
 
 # Core Tool Execution Functions
 
-def execute_memory_tool(params: dict, config: dict) -> dict: # Added config
+def execute_memory_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'memory' tool by calling the feedback binary.
+    This tool is for querying an agent's memory or providing feedback.
+
+    Args:
+        params (dict): A dictionary containing validated parameters,
+                       matching MemoryParams (expects 'agent_name', 'query').
+        config (dict): The global server CONFIG dictionary, used for
+                       'FEEDBACK_BIN_PATH' and 'COMMAND_TIMEOUT_SECONDS'.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data'/'message' accordingly.
+    """
     try:
         agent_name = params['agent_name']
         query = params['query']
         command = [config['FEEDBACK_BIN_PATH'], '--env', agent_name.lower(), '--mode', 'infer', '--query', query]
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         # Intentionally not using parse_swechaind_error for feedback tool
         result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=config['COMMAND_TIMEOUT_SECONDS'])
@@ -355,7 +389,20 @@ def execute_memory_tool(params: dict, config: dict) -> dict: # Added config
         logging.error(f"An unexpected error occurred in execute_memory_tool: {e}", exc_info=True)
         return {"status": "error", "message": f"An unexpected error occurred during memory tool execution: {str(e)}"}
 
-def execute_balance_tool(params: dict, config: dict) -> dict: # Added config
+def execute_balance_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'balance' tool by calling swechaind to query account balances.
+
+    Args:
+        params (dict): A dictionary containing validated parameters,
+                       matching BalanceParams (expects 'account').
+        config (dict): The global server CONFIG dictionary, used for
+                       'SWECHAIND_PATH', 'DEFAULT_FEES', 'COMMAND_TIMEOUT_SECONDS'.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data'/'message' accordingly. JSON data is returned on full success.
+    """
     stderr_output = ""
     original_exception = None
     try:
@@ -398,17 +445,30 @@ def execute_balance_tool(params: dict, config: dict) -> dict: # Added config
         return {"status": "error", "message": enhanced_error_message}
 
 def execute_pay_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'pay' tool by calling swechaind to send tokens from one address to another.
+
+    Args:
+        params (dict): A dictionary containing validated parameters,
+                       matching PayParams (expects 'from_address', 'to', 'amount').
+        config (dict): The global server CONFIG dictionary, used for 'SWECHAIND_PATH',
+                       'KEYRING_BACKEND', 'CHAIN_ID', 'DEFAULT_FEES', 'COMMAND_TIMEOUT_SECONDS'.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data'/'message' accordingly. JSON data (tx response) is returned on full success.
+    """
     stderr_output = ""
     original_exception = None
     try:
         from_addr = params['from_address'] # Changed from params['from'] to match PayParams
         to_addr = params['to']
         amount_val = params['amount']
-        
+
         command = [
-            config['SWECHAIND_PATH'], 'tx', 'bank', 'send', 
+            config['SWECHAIND_PATH'], 'tx', 'bank', 'send',
             from_addr.lower(), to_addr.lower(), amount_val + 'token', # Append 'token' denomination
-            '--from', from_addr.lower(), 
+            '--from', from_addr.lower(),
             '--keyring-backend', config['KEYRING_BACKEND'],
             '--chain-id', config['CHAIN_ID'],
             '--fees', config['DEFAULT_FEES'],
@@ -426,10 +486,10 @@ def execute_pay_tool(params: dict, config: dict) -> dict:
                 return {"status": "success", "data_type": "json", "data": parsed_json}
             except json.JSONDecodeError as je:
                 stdout_stripped = result.stdout.strip()
-                if stdout_stripped: 
+                if stdout_stripped:
                     logging.warning(f"Pay tool output was not valid JSON: {je}. Output: {stdout_stripped}")
                     return {"status": "success", "data_type": "text", "data": stdout_stripped, "warning": "Command output was not valid JSON."}
-                else: 
+                else:
                     logging.info("Pay tool executed, but produced no JSON output (stdout was empty). This might be normal.")
                     return {"status": "success", "data_type": "text", "data": "", "warning": "Command executed but produced no JSON output."}
         else: # Non-zero return code
@@ -444,7 +504,7 @@ def execute_pay_tool(params: dict, config: dict) -> dict:
         logging.error(f"Pay tool command timed out after {config['COMMAND_TIMEOUT_SECONDS']} seconds.")
         enhanced_error_message = parse_swechaind_error(stderr_output, "pay", config['DEFAULT_FEES'], original_exception)
         return {"status": "error", "message": enhanced_error_message}
-    except KeyError as e: 
+    except KeyError as e:
         logging.error(f"Missing parameter for pay tool: {e}")
         return {"status": "error", "message": f"Missing required parameter for pay tool: {e}"}
     except Exception as e:
@@ -453,45 +513,89 @@ def execute_pay_tool(params: dict, config: dict) -> dict:
         enhanced_error_message = parse_swechaind_error(stderr_output, "pay", config['DEFAULT_FEES'], original_exception)
         return {"status": "error", "message": enhanced_error_message}
 
-def execute_addr_tool(params: dict, config: dict) -> dict: # Added config
+def execute_addr_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'addr' tool to retrieve a blockchain address for a given key name.
+    Uses swechaind to show the key.
+
+    Args:
+        params (dict): A dictionary containing validated parameters for the tool,
+                       matching the AddrParams model (expects 'account_name').
+        config (dict): The global server CONFIG dictionary with settings like
+                       'SWECHAIND_PATH', 'KEYRING_BACKEND', and 'COMMAND_TIMEOUT_SECONDS'.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data'/'message' accordingly.
+    """
+    stderr_output = ""
+    original_exception = None
     try:
         account_name = params['account_name']
-        command = [SWECHAIND_CMD, 'keys', 'show', account_name.lower(), '-a']
+        command = [
+            config['SWECHAIND_PATH'], 'keys', 'show', account_name.lower(),
+            '-a', # Output address only
+            '--keyring-backend', config['KEYRING_BACKEND']
+        ]
 
         logging.info(f"Executing command: {' '.join(command)}")
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False,
+            timeout=config['COMMAND_TIMEOUT_SECONDS']
+        )
+        stderr_output = result.stderr if result else ""
 
-        if result.returncode == 0:
+        if result and result.returncode == 0:
             logging.info(f"Address tool executed successfully. Output: {result.stdout.strip()}")
             return {"status": "success", "data_type": "text", "data": result.stdout.strip()}
-        else:
-            logging.error(f"Address tool execution failed. Return code: {result.returncode}, Stderr: {result.stderr.strip()}")
-            return {"status": "error", "message": "Address tool execution failed", "details": result.stderr.strip(), "returncode": result.returncode}
+        else: # Non-zero return code or result is None
+            enhanced_error_message = parse_swechaind_error(stderr_output, "addr", config['DEFAULT_FEES'], None if not result else original_exception)
+            logging.error(f"Address tool execution failed. Parsed error: {enhanced_error_message}. Stderr: {stderr_output.strip() if stderr_output else 'N/A'}")
+            return {"status": "error", "message": enhanced_error_message}
     except FileNotFoundError:
-        logging.error(f"Command '{SWECHAIND_CMD}' not found.")
-        return {"status": "error", "message": f"Command '{SWECHAIND_CMD}' not found."}
-    except KeyError as e:
+        logging.error(f"Command '{config['SWECHAIND_PATH']}' not found.")
+        return {"status": "error", "message": f"Command '{config['SWECHAIND_PATH']}' not found."}
+    except subprocess.TimeoutExpired as te:
+        original_exception = te
+        logging.error(f"Address tool command timed out after {config['COMMAND_TIMEOUT_SECONDS']} seconds.")
+        enhanced_error_message = parse_swechaind_error(stderr_output, "addr", config['DEFAULT_FEES'], original_exception)
+        return {"status": "error", "message": enhanced_error_message}
+    except KeyError as e: # Should be caught by Pydantic
         logging.error(f"Missing parameter for addr tool: {e}")
-        return {"status": "error", "message": f"Missing required parameter: {e}"}
+        return {"status": "error", "message": f"Missing required parameter for addr tool: {str(e)}"}
     except Exception as e:
-        logging.error(f"An unexpected error occurred in execute_addr_tool: {e}")
-        return {"status": "error", "message": "An unexpected error occurred during address tool execution", "details": str(e)}
+        original_exception = e
+        logging.error(f"An unexpected error occurred in execute_addr_tool: {e}", exc_info=True)
+        enhanced_error_message = parse_swechaind_error(stderr_output, "addr", config['DEFAULT_FEES'], original_exception)
+        return {"status": "error", "message": enhanced_error_message}
 
 def execute_feedbackqa_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'feedbackQA' tool by calling the feedbackQA binary with a question.
+    This tool is for querying various states or information from the environment via a helper script.
+
+    Args:
+        params (dict): A dictionary containing validated parameters,
+                       matching FeedbackQAParams (expects 'question').
+        config (dict): The global server CONFIG dictionary, used for
+                       'FEEDBACK_QA_BIN_PATH' and 'COMMAND_TIMEOUT_SECONDS'.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data'/'message' accordingly. Text data is returned on success.
+    """
     try:
         question = params['question']
         # The question string is passed as a single argument to the script.
-        # Shell safety is less of a concern here if the script is trusted and handles its own args,
-        # but if the question could contain shell metacharacters and was interpolated directly into a shell string,
-        # it would be an issue. Here, it's an argument in a list, which is safer.
-        command = [config['FEEDBACK_QA_BIN_PATH'], question] 
-        
+        # This is generally safer than shell interpolation if the script handles its arguments correctly.
+        command = [config['FEEDBACK_QA_BIN_PATH'], question]
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True, 
-            check=False, 
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
             timeout=config['COMMAND_TIMEOUT_SECONDS']
         )
 
@@ -516,6 +620,21 @@ def execute_feedbackqa_tool(params: dict, config: dict) -> dict:
         return {"status": "error", "message": f"An unexpected error occurred during feedbackQA tool execution: {str(e)}"}
 
 def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'create-and-fund-address' tool.
+    It ensures a key exists for the given username (creating it if not),
+    then funds the corresponding address from a funder_address.
+    This process is designed to be idempotent for key creation.
+
+    Args:
+        params (dict): Validated parameters matching CreateAndFundParams
+                       ('username', 'amount', 'funder_address').
+        config (dict): Global server CONFIG for paths, defaults, and timeout.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data' (a detailed text summary) or 'message' accordingly.
+    """
     try:
         username = params['username']
         amount = params['amount']
@@ -528,7 +647,7 @@ def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
     key_already_exists = False
     add_exception = None
     add_result = None
-    
+
     # Step 1: Ensure Key Exists (Idempotency Logic)
     try:
         keys_add_cmd = [
@@ -538,7 +657,7 @@ def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
         ]
         logging.info(f"Executing key add command: {' '.join(keys_add_cmd)}")
         add_result = subprocess.run(
-            keys_add_cmd, capture_output=True, text=True, check=False, 
+            keys_add_cmd, capture_output=True, text=True, check=False,
             timeout=config['COMMAND_TIMEOUT_SECONDS']
         )
     except FileNotFoundError:
@@ -554,7 +673,7 @@ def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
     add_stderr = add_result.stderr if add_result else ""
     if (add_result and add_result.returncode != 0) or add_exception:
         enhanced_key_add_err_msg = parse_swechaind_error(add_stderr, "create-and-fund-address-key-add", config['DEFAULT_FEES'], add_exception)
-        
+
         if "already exists" in enhanced_key_add_err_msg.lower() or "already exists" in add_stderr.lower():
             key_already_exists = True
             logging.info(f"Key '{username}' already exists. Retrieving address.")
@@ -631,12 +750,12 @@ def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
     except Exception as e:
         fund_exception = e
         logging.error(f"Unexpected error during funding command for new address '{new_address}': {e}", exc_info=True)
-        
+
     fund_stderr = fund_result.stderr if fund_result else ""
     if (fund_result and fund_result.returncode != 0) or fund_exception:
         err_msg = parse_swechaind_error(fund_stderr, "create-and-fund-address-funding", config['DEFAULT_FEES'], fund_exception)
         return {"status": "error", "message": f"Funding failed for new address '{new_address}': {err_msg}"}
-    
+
     funding_tx_details = fund_result.stdout.strip() if fund_result else "No output from funding command."
 
     # Step 4: Format Success Response
@@ -650,6 +769,18 @@ def execute_create_and_fund_tool(params: dict, config: dict) -> dict:
     return {"status": "success", "data_type": "text", "data": final_result_text}
 
 def execute_open_auction_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'open-auction' tool by calling swechaind to create an auction.
+
+    Args:
+        params (dict): Validated parameters matching OpenAuctionParams
+                       ('issue', 'description', 'status', 'winner', 'from_address').
+        config (dict): Global server CONFIG for paths, defaults, and timeout.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data' (JSON tx response) or 'message' accordingly.
+    """
     stderr_output = ""
     original_exception = None
     try:
@@ -657,8 +788,8 @@ def execute_open_auction_tool(params: dict, config: dict) -> dict:
         issue = params['issue']
         description = params['description']
         status = params['status']
-        winner = params.get('winner', 'TBD') # .get() handles default if not provided
-        from_address = params['from_address'] # from Pydantic alias 'from'
+        winner = params.get('winner', 'TBD') # Use .get() for optional field with default
+        from_address = params['from_address'] # Corresponds to 'from' in Pydantic due to alias
 
         command = [
             config['SWECHAIND_PATH'], 'tx', 'issuemarket', 'create-auction',
@@ -669,10 +800,10 @@ def execute_open_auction_tool(params: dict, config: dict) -> dict:
             '--fees', config['DEFAULT_FEES'],
             '--yes', '--output', 'json'
         ]
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(
-            command, capture_output=True, text=True, check=False, 
+            command, capture_output=True, text=True, check=False,
             timeout=config['COMMAND_TIMEOUT_SECONDS']
         )
         stderr_output = result.stderr if result else ""
@@ -708,20 +839,33 @@ def execute_open_auction_tool(params: dict, config: dict) -> dict:
         return {"status": "error", "message": enhanced_error_message}
 
 def execute_create_bid_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'create-bid' tool by calling swechaind to place a bid on an auction.
+
+    Args:
+        params (dict): Validated parameters matching CreateBidParams
+                       ('auctionId', 'bidder', 'amount', 'description', 'from_address').
+        config (dict): Global server CONFIG for paths, defaults, and timeout.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data' (JSON tx response) or 'message' accordingly.
+    """
     stderr_output = ""
     original_exception = None
     try:
         auction_id = params['auctionId']
-        bidder = params['bidder'] # This should be an address
+        bidder = params['bidder']
         amount = params['amount']
         description = params['description']
-        from_address = params['from_address'] # This should be the same as bidder
+        from_address = params['from_address'] # Corresponds to 'from' in Pydantic due to alias
 
+        # It's crucial that 'from_address' (the signer) has control over the 'bidder' address,
+        # or they are the same. The blockchain will enforce this.
         if bidder.lower() != from_address.lower():
-            logging.warning(f"Bidder '{bidder}' and from_address '{from_address}' are not the same for create-bid. Using from_address as the signer.")
-            # The command uses from_address for the --from flag, so this is more of a logical check / warning.
+            logging.warning(f"Bidder '{bidder}' and from_address (signer) '{from_address}' are different for create-bid. This is unusual unless from_address is authorized to act for bidder.")
 
-        amount_with_denom = amount + "token"
+        amount_with_denom = amount + "token" # Append fixed denomination
 
         command = [
             config['SWECHAIND_PATH'], 'tx', 'issuemarket', 'create-bid',
@@ -732,10 +876,10 @@ def execute_create_bid_tool(params: dict, config: dict) -> dict:
             '--fees', config['DEFAULT_FEES'],
             '--yes', '--output', 'json'
         ]
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(
-            command, capture_output=True, text=True, check=False, 
+            command, capture_output=True, text=True, check=False,
             timeout=config['COMMAND_TIMEOUT_SECONDS']
         )
         stderr_output = result.stderr if result else ""
@@ -771,6 +915,19 @@ def execute_create_bid_tool(params: dict, config: dict) -> dict:
         return {"status": "error", "message": enhanced_error_message}
 
 def execute_close_auction_tool(params: dict, config: dict) -> dict:
+    """
+    Executes the 'close-auction' tool by calling swechaind to update an auction's status,
+    typically to 'closed' and declare a winner.
+
+    Args:
+        params (dict): Validated parameters matching CloseAuctionParams
+                       ('auctionId', 'issue', 'description', 'status', 'winner', 'from_address').
+        config (dict): Global server CONFIG for paths, defaults, and timeout.
+
+    Returns:
+        dict: A dictionary with 'status': 'success' or 'error',
+              and 'data' (JSON tx response) or 'message' accordingly.
+    """
     stderr_output = ""
     original_exception = None
     try:
@@ -779,12 +936,12 @@ def execute_close_auction_tool(params: dict, config: dict) -> dict:
         description = params['description']
         status = params['status']
         winner = params['winner']
-        from_address = params['from_address']
+        from_address = params['from_address'] # Corresponds to 'from' in Pydantic due to alias
 
         if status.lower() != 'closed':
-            logging.warning(f"Close-auction tool called with status '{status}', but it should typically be 'closed'. Proceeding as per Go implementation, which uses the provided status.")
-            # The command `update-auction` will use the status string as provided.
-            # If the intent is to *only* allow closing, this logic might need adjustment or a Pydantic validator.
+            # Log a warning if the status is not 'closed', as this is the typical use case.
+            # The blockchain module itself (`issuemarket`) might have its own validation for allowed status transitions.
+            logging.warning(f"Close-auction tool called with status '{status}'. While this command updates the auction, it's typically used to set status to 'closed'.")
 
         command = [
             config['SWECHAIND_PATH'], 'tx', 'issuemarket', 'update-auction',
@@ -795,10 +952,10 @@ def execute_close_auction_tool(params: dict, config: dict) -> dict:
             '--fees', config['DEFAULT_FEES'],
             '--yes', '--output', 'json'
         ]
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(
-            command, capture_output=True, text=True, check=False, 
+            command, capture_output=True, text=True, check=False,
             timeout=config['COMMAND_TIMEOUT_SECONDS']
         )
         stderr_output = result.stderr if result else ""
@@ -851,24 +1008,35 @@ if __name__ == "__main__":
     except ValueError:
         logging.warning(f"Invalid MCP_SERVER_PORT value '{os.environ.get('MCP_SERVER_PORT')}', defaulting to 8000.")
         server_port = 8000
-    
+
     logging.info(f"Starting MCP Server on {server_host}:{server_port}")
-    
+
     # Log all configuration values
-    logging.info("--- Application Configuration ---")
+    logging.info("--- Application Configuration (Excluding Log Level already logged) ---")
     for key, value in CONFIG.items():
-        logging.info(f"CONFIG - {key}: {value}")
+        if key != 'LOG_LEVEL': # Avoid redundant logging of LOG_LEVEL
+            logging.info(f"CONFIG - {key}: {value}")
     logging.info(f"CONFIG - MCP_SERVER_HOST (for Uvicorn): {server_host}")
     logging.info(f"CONFIG - MCP_SERVER_PORT (for Uvicorn): {server_port}")
     logging.info("-------------------------------")
-    
+    # Note: The "Logging level set to..." message is now logged when basicConfig is first effectively set.
+
+    # Security Warning for 'test' keyring backend
+    if CONFIG.get('KEYRING_BACKEND') == 'test':
+        logging.warning(
+            "SECURITY WARNING: The 'KEYRING_BACKEND' is configured to 'test'. "
+            "This is insecure and NOT recommended for production environments as it "
+            "may use publicly known mnemonics or insecure key storage. "
+            "Consider using 'os', 'file', or another secure keyring backend for production deployments."
+        )
+
     uvicorn.run(app, host=server_host, port=server_port, reload=True)
 
 # Tool executor mapping
 TOOL_EXECUTORS = {
     "memory": execute_memory_tool,
     "balance": execute_balance_tool,
-    "pay": execute_pay_tool, 
+    "pay": execute_pay_tool,
     "addr": execute_addr_tool,
     "feedbackQA": execute_feedbackqa_tool,
     "create-and-fund-address": execute_create_and_fund_tool,
@@ -878,13 +1046,29 @@ TOOL_EXECUTORS = {
 }
 
 # Unified SSE Event Generator
-async def generate_sse_events(tool_name: str, params_dict: dict, config: dict): # Added config
+async def generate_sse_events(tool_name: str, params_dict: dict, config: dict):
+    """
+    Asynchronously generates Server-Sent Events (SSE) for a given tool execution.
+
+    This function orchestrates the tool execution in a separate thread pool
+    and yields events for 'tool_started', 'tool_result' (on success),
+    'tool_error' (on tool-specific failure or execution crash),
+    'runtime_error' (for generator-level issues), and 'tool_finished'.
+
+    Args:
+        tool_name (str): The name of the tool to execute.
+        params_dict (dict): A dictionary of parameters for the tool.
+        config (dict): The global server CONFIG dictionary.
+
+    Yields:
+        str: SSE formatted event strings.
+    """
     try:
         logging.info(f"Starting SSE event generation for tool: {tool_name} with params: {params_dict}")
         yield f"data: {json.dumps({'event_type': 'tool_started', 'tool_name': tool_name})}\n\n"
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.01) # Ensure the first message is sent
 
-        executor = TOOL_EXECUTORS.get(tool_name) 
+        executor = TOOL_EXECUTORS.get(tool_name)
         if not executor:
              logging.error(f"No executor found for tool: {tool_name} (this should not happen with specific endpoints)")
              error_payload = {'status': 'error', 'message': 'Internal server error: Executor not found for tool.', 'details': f"Tool name: {tool_name}"}
@@ -896,7 +1080,8 @@ async def generate_sse_events(tool_name: str, params_dict: dict, config: dict): 
         loop = asyncio.get_event_loop()
         result = None
         try:
-            result = await loop.run_in_executor(None, executor, params_dict, config) # Pass config
+            # Tool executor functions are called here with params_dict and config
+            result = await loop.run_in_executor(None, executor, params_dict, config)
         except Exception as e:
             logging.error(f"Unexpected error during threaded execution of tool '{tool_name}': {e}", exc_info=True)
             error_payload = {'status': 'error', 'message': 'Tool execution crashed unexpectedly.', 'details': str(e), 'type': e.__class__.__name__}
@@ -934,10 +1119,11 @@ async def generate_sse_events(tool_name: str, params_dict: dict, config: dict): 
         logging.info(f"SSE stream closed for tool: {tool_name}")
 
 # Specific SSE Endpoints
-@app.post("/tools/memory/invoke-sse", 
-          summary="Invoke Memory Tool (SSE)", 
+@app.post("/tools/memory/invoke-sse",
+          summary="Invoke Memory Tool (SSE)",
           description="Streams events for memory tool execution. Takes query and agent_name, calls feedback binary.")
 async def invoke_memory_sse(params: MemoryParams):
+    """FastAPI endpoint to invoke the 'memory' tool and stream results via SSE."""
     logging.info(f"SSE request for 'memory' tool with validated params: {params.dict()}")
     return StreamingResponse(generate_sse_events("memory", params.dict(), CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -945,14 +1131,16 @@ async def invoke_memory_sse(params: MemoryParams):
           summary="Invoke Balance Tool (SSE)",
           description="Streams events for balance tool execution. Takes an account address, calls swechaind to query balances.")
 async def invoke_balance_sse(params: BalanceParams):
+    """FastAPI endpoint to invoke the 'balance' tool and stream results via SSE."""
     logging.info(f"SSE request for 'balance' tool with validated params: {params.dict()}")
     return StreamingResponse(generate_sse_events("balance", params.dict(), CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
-@app.post("/tools/pay/invoke-sse", # Renamed from /send/invoke-sse
-          summary="Invoke Pay Tool (SSE)", # Updated summary
-          description="Streams events for token payment execution. Takes from_address, to_address, and amount, calls swechaind to send tokens.") # Updated description
-async def invoke_pay_sse(params: PayParams): # Renamed function and Pydantic model
-    params_dict = params.dict(by_alias=True) 
+@app.post("/tools/pay/invoke-sse",
+          summary="Invoke Pay Tool (SSE)",
+          description="Streams events for token payment execution. Takes from_address, to_address, and amount, calls swechaind to send tokens.")
+async def invoke_pay_sse(params: PayParams):
+    """FastAPI endpoint to invoke the 'pay' tool and stream results via SSE."""
+    params_dict = params.dict(by_alias=True)
     logging.info(f"SSE request for 'pay' tool with validated params (aliases used): {params_dict}")
     return StreamingResponse(generate_sse_events("pay", params_dict, CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -960,6 +1148,7 @@ async def invoke_pay_sse(params: PayParams): # Renamed function and Pydantic mod
           summary="Invoke Address Tool (SSE)",
           description="Streams events for address tool execution. Takes an account_name, calls swechaind to retrieve the address.")
 async def invoke_addr_sse(params: AddrParams):
+    """FastAPI endpoint to invoke the 'addr' tool and stream results via SSE."""
     logging.info(f"SSE request for 'addr' tool with validated params: {params.dict()}")
     return StreamingResponse(generate_sse_events("addr", params.dict(), CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -967,6 +1156,7 @@ async def invoke_addr_sse(params: AddrParams):
           summary="Invoke FeedbackQA Tool (SSE)",
           description="Streams events for feedbackQA tool execution. Takes a question and calls the feedbackQA binary.")
 async def invoke_feedbackqa_sse(params: FeedbackQAParams):
+    """FastAPI endpoint to invoke the 'feedbackQA' tool and stream results via SSE."""
     logging.info(f"SSE request for 'feedbackQA' tool with validated params: {params.dict()}")
     return StreamingResponse(generate_sse_events("feedbackQA", params.dict(), CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -974,6 +1164,7 @@ async def invoke_feedbackqa_sse(params: FeedbackQAParams):
           summary="Invoke Create and Fund Address Tool (SSE)",
           description="Streams events for creating a new key/address and funding it. Idempotent for key creation.")
 async def invoke_create_and_fund_sse(params: CreateAndFundParams):
+    """FastAPI endpoint to invoke the 'create-and-fund-address' tool and stream results via SSE."""
     logging.info(f"SSE request for 'create-and-fund-address' tool with validated params: {params.dict()}")
     return StreamingResponse(generate_sse_events("create-and-fund-address", params.dict(), CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -981,8 +1172,9 @@ async def invoke_create_and_fund_sse(params: CreateAndFundParams):
           summary="Invoke Open Auction Tool (SSE)",
           description="(Open World Hint) Creates a new auction *on the blockchain* for a specific issue. IMPORTANT: Use the AGENT_ADDRESS you previously obtained from 'create-and-fund-address' for the 'from' parameter.")
 async def invoke_open_auction_sse(params: OpenAuctionParams):
+    """FastAPI endpoint to invoke the 'open-auction' tool and stream results via SSE."""
     # Use by_alias=True for the 'from' parameter to match 'from_address' in Pydantic model
-    params_dict = params.dict(by_alias=True) 
+    params_dict = params.dict(by_alias=True)
     logging.info(f"SSE request for 'open-auction' tool with validated params (aliases used): {params_dict}")
     return StreamingResponse(generate_sse_events("open-auction", params_dict, CONFIG), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -990,6 +1182,7 @@ async def invoke_open_auction_sse(params: OpenAuctionParams):
           summary="Invoke Create Bid Tool (SSE)",
           description="(Open World Hint) Places a bid *on the blockchain* on an existing open auction. IMPORTANT: Use the AGENT_ADDRESS you previously obtained from 'create-and-fund-address' for the 'bidder' and 'from' parameters.")
 async def invoke_create_bid_sse(params: CreateBidParams):
+    """FastAPI endpoint to invoke the 'create-bid' tool and stream results via SSE."""
     # Use by_alias=True for the 'from' parameter to match 'from_address' in Pydantic model
     params_dict = params.dict(by_alias=True)
     logging.info(f"SSE request for 'create-bid' tool with validated params (aliases used): {params_dict}")
@@ -999,6 +1192,7 @@ async def invoke_create_bid_sse(params: CreateBidParams):
           summary="Invoke Close Auction Tool (SSE)",
           description="(Open World Hint) Updates an auction status to 'closed' *on the blockchain*, specifying the winner. IMPORTANT: Use the AGENT_ADDRESS you previously obtained for the 'from' parameter (must be the auction creator). The 'winner' address MUST be the actual winner's address. Payment is separate via 'pay'.")
 async def invoke_close_auction_sse(params: CloseAuctionParams):
+    """FastAPI endpoint to invoke the 'close-auction' tool and stream results via SSE."""
     # Use by_alias=True for the 'from' parameter to match 'from_address' in Pydantic model
     params_dict = params.dict(by_alias=True)
     logging.info(f"SSE request for 'close-auction' tool with validated params (aliases used): {params_dict}")

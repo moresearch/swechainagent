@@ -97,7 +97,7 @@ def handle_memory(params):
     definition = _get_tool_definition("memory")
     if not definition:
         return {"error": "Tool definition not found for 'memory'"}
-        
+
     for param_def in definition.get("parameters", []):
         if param_def.get("required") and param_def["name"] not in params:
             return {"error": "Missing required parameter", "parameter_name": param_def["name"]}
@@ -107,7 +107,7 @@ def handle_memory(params):
         query = params["query"]
         # Ensure ./bin/feedback is executable: os.chmod('./bin/feedback', 0o755) might be needed once if not set
         command = ['./bin/feedback', '--env', agent_name.lower(), '--mode', 'infer', '--query', query]
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=False)
 
@@ -137,7 +137,7 @@ def handle_balance(params):
     try:
         account = params["account"]
         command = ['swechaind', 'query', 'bank', 'balances', account, '--output', 'json']
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=False)
 
@@ -170,12 +170,12 @@ def handle_send(params):
             return {"error": "Missing required parameter", "parameter_name": param_def["name"]}
 
     try:
-        from_addr = params["from"] 
+        from_addr = params["from"]
         to_addr = params["to"]
         amount = params["amount"]
-        
+
         command = ['swechaind', 'tx', 'bank', 'send', from_addr.lower(), to_addr.lower(), amount, '--from', from_addr.lower(), '--output', 'json', '--yes']
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=False)
 
@@ -189,10 +189,10 @@ def handle_send(params):
                     return {"error": "Send tool output was not valid JSON", "details": str(e), "raw_output": result.stdout.strip()}
                 else:
                      return {"error": "Send tool execution might have failed or produced no JSON output", "details": result.stderr.strip() or "No stderr output", "returncode": result.returncode}
-        else: 
+        else:
             logging.error(f"Send tool execution failed. Return code: {result.returncode}, Stdout: {result.stdout.strip()}, Stderr: {result.stderr.strip()}")
             return {"error": "Send tool execution failed", "details": result.stderr.strip() or result.stdout.strip() or "No output", "returncode": result.returncode}
-    except KeyError as e: 
+    except KeyError as e:
         logging.error(f"Missing parameter for send tool: {e}")
         return {"error": "Missing required parameter for send tool", "parameter_name": str(e)}
     except Exception as e:
@@ -213,7 +213,7 @@ def handle_addr(params):
     try:
         account_name = params["account_name"]
         command = ['swechaind', 'keys', 'show', account_name.lower(), '-a']
-        
+
         logging.info(f"Executing command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=False)
 
@@ -254,7 +254,7 @@ def main():
         if not line:  # End of input
             logging.info("EOF received, exiting.")
             break
-        
+
         line = line.strip() # Remove leading/trailing whitespace, especially newline
         if not line: # Skip empty lines
             continue
@@ -294,17 +294,17 @@ def main():
                     else:
                         response_payload = handler_result # Success, result is the payload
                         status = "success"
-                else: 
+                else:
                     # This case should ideally not be reached if handlers are robust
                     logging.error(f"Tool handler for '{tool_name}' returned None or an empty result.")
                     response_payload = {"error": "Tool handler returned no result", "tool_name": tool_name}
                     status = "error"
-            
+
             send_mcp_response({
                 "status": status,
                 # Include tool_name in the response, even if it was missing in the request (will be None)
                 # or if the tool_name was unknown.
-                "tool_name": tool_name if tool_name else "N/A", 
+                "tool_name": tool_name if tool_name else "N/A",
                 "result": response_payload
             })
 
